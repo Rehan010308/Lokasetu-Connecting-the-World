@@ -1,0 +1,207 @@
+import type { DB, Worker, Resident, Job } from './types';
+import { AREAS } from './geo';
+
+function trust(rel: number, skill: number, prof: number, n: number) {
+  return {
+    reliability: rel,
+    skillQuality: skill,
+    professionalism: prof,
+    overall: Math.round(((rel + skill + prof) / 3) * 10) / 10,
+    reviewCount: n,
+  };
+}
+
+const T0 = 1735689600000; // fixed timestamp so server and client render identically
+
+const workers: Worker[] = [
+  {
+    id: 'w1', name: 'Ramesh Kumar', phone: '9876500001', lang: 'hi',
+    category: 'electrician',
+    skills: ['Wiring', 'Fan installation', 'Inverter repair'],
+    experienceYears: 6,
+    rawSpeech: 'Main electrical wiring, pankha lagana aur inverter repair karta hoon, chhe saal ka experience hai',
+    summary: 'Electrician with 6 years of experience. Does wiring, fan installation, inverter repair.',
+    geo: AREAS[0], radiusKm: 5, availability: 'anytime',
+    jobsDone: 47, trust: trust(4.8, 4.9, 4.7, 31), createdAt: T0 - 86400000 * 120,
+  },
+  {
+    id: 'w2', name: 'Suresh Patil', phone: '9876500002', lang: 'kn',
+    category: 'electrician',
+    skills: ['Switchboard', 'Lighting', 'Geyser fitting'],
+    experienceYears: 3,
+    rawSpeech: 'ನಾನು ಸ್ವಿಚ್ ಬೋರ್ಡ್, ಲೈಟ್ ಮತ್ತು ಗೀಸರ್ ಕೆಲಸ ಮಾಡುತ್ತೇನೆ, ಮೂರು ವರ್ಷದ ಅನುಭವ',
+    summary: 'Electrician with 3 years of experience. Does switchboard, lighting, geyser fitting.',
+    geo: AREAS[1], radiusKm: 10, availability: 'weekdays',
+    jobsDone: 18, trust: trust(4.2, 4.4, 4.6, 12), createdAt: T0 - 86400000 * 60,
+  },
+  {
+    id: 'w3', name: 'Murugan S', phone: '9876500003', lang: 'ta',
+    category: 'plumber',
+    skills: ['Leak repair', 'Tap fitting', 'Motor & tank'],
+    experienceYears: 9,
+    rawSpeech: 'நான் கசிவு பழுது, குழாய் பொருத்துதல், மோட்டார் வேலை செய்கிறேன், ஒன்பது வருட அனுபவம்',
+    summary: 'Plumber with 9 years of experience. Does leak repair, tap fitting, motor & tank.',
+    geo: AREAS[0], radiusKm: 5, availability: 'anytime',
+    jobsDone: 88, trust: trust(4.9, 4.8, 4.9, 54), createdAt: T0 - 86400000 * 300,
+  },
+  {
+    id: 'w4', name: 'Anil Yadav', phone: '9876500004', lang: 'hi',
+    category: 'plumber',
+    skills: ['Drain cleaning', 'Toilet repair', 'Pipe laying'],
+    experienceYears: 4,
+    rawSpeech: 'Nali saaf karna, toilet repair, pipe line ka kaam, chaar saal se',
+    summary: 'Plumber with 4 years of experience. Does drain cleaning, toilet repair, pipe laying.',
+    geo: AREAS[3], radiusKm: 10, availability: 'anytime',
+    jobsDone: 25, trust: trust(4.0, 4.3, 4.1, 15), createdAt: T0 - 86400000 * 90,
+  },
+  {
+    id: 'w5', name: 'Lakshmi Devi', phone: '9876500005', lang: 'te',
+    category: 'maid',
+    skills: ['Sweeping & mopping', 'Utensil washing', 'Laundry'],
+    experienceYears: 7,
+    rawSpeech: 'నేను ఇల్లు ఊడ్చడం, పాత్రలు కడగడం, బట్టలు ఉతకడం చేస్తాను, ఏడు సంవత్సరాల అనుభవం',
+    summary: 'House help with 7 years of experience. Does sweeping & mopping, utensil washing, laundry.',
+    geo: AREAS[0], radiusKm: 2, availability: 'weekdays',
+    jobsDone: 132, trust: trust(4.7, 4.6, 4.8, 61), createdAt: T0 - 86400000 * 400,
+  },
+  {
+    id: 'w6', name: 'Sunita Bai', phone: '9876500006', lang: 'hi',
+    category: 'maid',
+    skills: ['Dusting', 'Bathroom cleaning', 'Deep cleaning'],
+    experienceYears: 2,
+    rawSpeech: 'Jhaadu poocha, bathroom safai, deep cleaning karti hoon, do saal se',
+    summary: 'House help with 2 years of experience. Does dusting, bathroom cleaning, deep cleaning.',
+    geo: AREAS[1], radiusKm: 5, availability: 'anytime',
+    jobsDone: 9, trust: trust(4.3, 4.0, 4.3, 6), createdAt: T0 - 86400000 * 40,
+  },
+  {
+    id: 'w7', name: 'Joseph Mathew', phone: '9876500007', lang: 'ml',
+    category: 'carpenter',
+    skills: ['Door repair', 'Cupboard fitting', 'Modular work'],
+    experienceYears: 12,
+    rawSpeech: 'ഞാൻ വാതിൽ പണി, അലമാര ഫിറ്റിംഗ്, മോഡുലാർ വർക്ക് ചെയ്യും, പന്ത്രണ്ട് വർഷത്തെ പരിചയം',
+    summary: 'Carpenter with 12 years of experience. Does door repair, cupboard fitting, modular work.',
+    geo: AREAS[2], radiusKm: 10, availability: 'weekdays',
+    jobsDone: 156, trust: trust(4.6, 4.9, 4.5, 73), createdAt: T0 - 86400000 * 500,
+  },
+  {
+    id: 'w8', name: 'Ravi Shankar', phone: '9876500008', lang: 'kn',
+    category: 'painter',
+    skills: ['Interior painting', 'Putty & primer', 'Texture work'],
+    experienceYears: 8,
+    rawSpeech: 'ಒಳಾಂಗಣ ಪೇಂಟಿಂಗ್, ಪುಟ್ಟಿ ಪ್ರೈಮರ್, ಟೆಕ್ಸ್ಚರ್ ಕೆಲಸ, ಎಂಟು ವರ್ಷದ ಅನುಭವ',
+    summary: 'Painter with 8 years of experience. Does interior painting, putty & primer, texture work.',
+    geo: AREAS[4], radiusKm: 10, availability: 'anytime',
+    jobsDone: 41, trust: trust(4.4, 4.7, 4.4, 27), createdAt: T0 - 86400000 * 200,
+  },
+  {
+    id: 'w9', name: 'Farida Begum', phone: '9876500009', lang: 'hi',
+    category: 'cook',
+    skills: ['North Indian', 'Chapati & roti', 'Tiffin service'],
+    experienceYears: 10,
+    rawSpeech: 'North Indian khana, roti chapati, tiffin service, das saal ka tajurba',
+    summary: 'Cook with 10 years of experience. Does north indian, chapati & roti, tiffin service.',
+    geo: AREAS[0], radiusKm: 5, availability: 'anytime',
+    jobsDone: 210, trust: trust(4.8, 4.9, 4.9, 96), createdAt: T0 - 86400000 * 600,
+  },
+  {
+    id: 'w10', name: 'Selvi R', phone: '9876500010', lang: 'ta',
+    category: 'cook',
+    skills: ['South Indian', 'Party cooking', 'Jain / satvik'],
+    experienceYears: 5,
+    rawSpeech: 'தென்னிந்திய சமையல், விருந்து சமையல், ஐந்து வருட அனுபவம்',
+    summary: 'Cook with 5 years of experience. Does south indian, party cooking, jain / satvik.',
+    geo: AREAS[3], radiusKm: 5, availability: 'today',
+    jobsDone: 33, trust: trust(4.5, 4.6, 4.4, 21), createdAt: T0 - 86400000 * 150,
+  },
+  {
+    id: 'w11', name: 'Imran Shaikh', phone: '9876500011', lang: 'hi',
+    category: 'barber',
+    skills: ['Haircut', 'Beard trim', 'Home service'],
+    experienceYears: 6,
+    rawSpeech: 'Baal katna, dadhi banana, ghar par service deta hoon',
+    summary: 'Barber with 6 years of experience. Does haircut, beard trim, home service.',
+    geo: AREAS[1], radiusKm: 5, availability: 'anytime',
+    jobsDone: 64, trust: trust(4.6, 4.5, 4.7, 38), createdAt: T0 - 86400000 * 220,
+  },
+  {
+    id: 'w12', name: 'Babu Rao', phone: '9876500012', lang: 'te',
+    category: 'raddiwala',
+    skills: ['Paper & cardboard', 'Plastic', 'Doorstep pickup'],
+    experienceYears: 15,
+    rawSpeech: 'పేపర్, అట్ట, ప్లాస్టిక్ కొంటాను, ఇంటికే వచ్చి తీసుకుంటాను',
+    summary: 'Scrap collector with 15 years of experience. Does paper & cardboard, plastic, doorstep pickup.',
+    geo: AREAS[0], radiusKm: 5, availability: 'anytime',
+    jobsDone: 380, trust: trust(4.4, 4.2, 4.5, 44), createdAt: T0 - 86400000 * 700,
+  },
+  {
+    id: 'w13', name: 'Kannan M', phone: '9876500013', lang: 'ta',
+    category: 'raddiwala',
+    skills: ['Metal', 'E-waste', 'Weighing on site'],
+    experienceYears: 4,
+    rawSpeech: 'இரும்பு, மின்னணு கழிவு வாங்குகிறேன், இடத்திலேயே எடை போடுவேன்',
+    summary: 'Scrap collector with 4 years of experience. Does metal, e-waste, weighing on site.',
+    geo: AREAS[1], radiusKm: 10, availability: 'weekdays',
+    jobsDone: 71, trust: trust(4.1, 4.3, 4.0, 19), createdAt: T0 - 86400000 * 130,
+  },
+  {
+    id: 'w14', name: 'Prakash Naik', phone: '9876500014', lang: 'kn',
+    category: 'carpenter',
+    skills: ['Furniture making', 'Lock & hinge', 'Polishing'],
+    experienceYears: 5,
+    rawSpeech: 'ಪೀಠೋಪಕರಣ ತಯಾರಿಕೆ, ಬೀಗ ಮತ್ತು ಹಿಂಜ್, ಪಾಲಿಶ್ ಕೆಲಸ',
+    summary: 'Carpenter with 5 years of experience. Does furniture making, lock & hinge, polishing.',
+    geo: AREAS[0], radiusKm: 5, availability: 'anytime',
+    jobsDone: 22, trust: trust(4.2, 4.4, 4.3, 14), createdAt: T0 - 86400000 * 100,
+  },
+];
+
+const residents: Resident[] = [
+  { id: 'r1', name: 'Priya Menon', phone: '9000000001', lang: 'en', geo: AREAS[0], createdAt: T0 - 86400000 * 50 },
+  { id: 'r2', name: 'Arjun Rao',   phone: '9000000002', lang: 'en', geo: AREAS[1], createdAt: T0 - 86400000 * 20 },
+];
+
+const jobs: Job[] = [
+  {
+    id: 'j1', residentId: 'r1',
+    title: 'Ceiling fan is making noise and stops sometimes',
+    rawRequest: 'Ceiling fan is making noise and stops sometimes, need an electrician today',
+    lang: 'en', category: 'electrician',
+    skills: ['Fan installation'], urgency: 'today', estimatedHours: 1,
+    geo: AREAS[0], priceMin: 240, priceMax: 350,
+    priceBasis: 'electrician base rate • 1 hour of work • same-day visit',
+    status: 'open', createdAt: T0 - 3600000 * 4,
+  },
+  {
+    id: 'j2', residentId: 'r2',
+    title: 'Kitchen sink pipe is leaking badly',
+    rawRequest: 'Kitchen sink pipe is leaking badly, water everywhere, urgent',
+    lang: 'en', category: 'plumber',
+    skills: ['Leak repair'], urgency: 'emergency', estimatedHours: 1,
+    geo: AREAS[1], priceMin: 300, priceMax: 420,
+    priceBasis: 'plumber base rate • 1 hour of work • emergency call-out',
+    status: 'open', createdAt: T0 - 3600000 * 2,
+  },
+  {
+    id: 'j3', residentId: 'r1',
+    title: 'Need house help for daily sweeping and utensils',
+    rawRequest: 'Need house help for daily sweeping, mopping and utensil washing',
+    lang: 'en', category: 'maid',
+    skills: ['Sweeping & mopping', 'Utensil washing'], urgency: 'this_week', estimatedHours: 2,
+    geo: AREAS[0], priceMin: 380, priceMax: 540,
+    priceBasis: 'maid base rate • 2 hours of work • no rush',
+    status: 'open', createdAt: T0 - 3600000 * 20,
+  },
+];
+
+export function seedDB(): DB {
+  return {
+    workers,
+    residents,
+    jobs,
+    quotes: [],
+    messages: [],
+    reviews: [],
+    session: { role: null, id: null, lang: 'en' },
+  };
+}
