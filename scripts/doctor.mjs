@@ -36,23 +36,24 @@ try {
   process.exit(0);
 }
 
+const WARN_ONLY = process.argv.includes('--warn');
+
 if (strays.length === 0) {
-  console.log('✅ No leftover files. Your folder matches this build exactly.');
+  if (!WARN_ONLY) console.log('✅ No leftover files. Your folder matches this build exactly.');
   process.exit(0);
 }
 
-console.log(`⚠️  ${strays.length} leftover file(s) from an older version are still in this folder.\n`);
+console.log(`\n⚠️  ${strays.length} file(s) here are not tracked by this build.\n`);
 for (const f of strays) console.log('   ' + f);
 
 console.log(`
-These are not part of the current build. Next.js will still try to compile them
-and they will break pages that are otherwise fine.
+If you just unzipped a new version over an old folder, these are leftovers from
+the previous build. Next.js will still compile them, and they import modules
+that no longer exist — which breaks pages that are otherwise fine.
 
-Remove them with:
+   npm run doctor:fix     remove them
 
-   npm run doctor:fix
-
-or delete the whole folder and unzip fresh, which is always safe.
+(If you added these files yourself, ignore this — it is only a warning.)
 `);
 
 if (process.argv.includes('--fix')) {
@@ -64,4 +65,4 @@ if (process.argv.includes('--fix')) {
   console.log(`\n🧹 Removed ${strays.length} leftover file(s). Now run: npm run dev`);
 }
 
-process.exit(strays.length ? 1 : 0);
+process.exit(WARN_ONLY ? 0 : strays.length ? 1 : 0);

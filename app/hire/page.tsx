@@ -32,7 +32,7 @@ export default function HirePage() {
   const { db, ready } = useStore();
   const me = useMe();
   const { t, lang } = useT();
-  const { postJob } = useActions();
+  const { requestBooking } = useActions();
 
   const isSociety = me.role === 'society';
   const cats = (isSociety ? SOCIETY_CATS : BUSINESS_CATS).map((id) => CATEGORIES.find((c) => c.id === id)!).filter(Boolean);
@@ -69,7 +69,7 @@ export default function HirePage() {
   function publish() {
     if (!svc || !cat || !me.id) return;
     const label = serviceName(svc, lang);
-    const id = postJob({
+    const id = requestBooking({
       clientId: me.id,
       clientRole: me.role as 'society' | 'business',
       title: `${label} × ${count} — ${t(`g.${duration}`)}`,
@@ -84,8 +84,7 @@ export default function HirePage() {
       priceMin: price?.min ?? 0,
       priceMax: price?.max ?? 0,
       priceBasis: `${count} × ${label} · ${t(`g.${duration}`)}`,
-      status: 'open',
-    });
+    }, rankWorkers({ geo: me.geo, category: cat, serviceId: svc }, db.workers).map((m) => m.worker.id));
     router.push(`/job/${id}`);
   }
 

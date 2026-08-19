@@ -10,6 +10,8 @@ import {
   emergencyCallLink, sosMessage, getPosition,
 } from '@/lib/links';
 import type { JobStatus, MessageKind, PaymentMethod } from '@/lib/types';
+import { PAYMENT_METHODS, TRUST_POINTS, amountFor, createOrder, holdFunds, releaseFunds, markCashPaid, statusKey } from '@/lib/payments';
+import { POLICY_ROWS, canCancel, cancelTerms } from '@/lib/cancellation';
 import { useActions, useMe, useStore, useT } from '@/components/store';
 import { useSpeech } from '@/components/kit';
 import { CardSkeleton, Dock, GlassCard, Reveal, SPRING, Sheet } from '@/components/aurora';
@@ -17,7 +19,6 @@ import { HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } fro
 import { navNormal, navWorker } from '@/components/nav';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
-const METHODS: PaymentMethod[] = ['upi', 'gpay', 'phonepe', 'paytm', 'cash'];
 
 /** Quick replies are stored as translation KEYS, so each side reads their own language. */
 const QUICK_KEYS = ['m.onWay', 'm.reached', 'm.late', 'm.callMe', 'm.finished', 'm.ok'] as const;
@@ -33,6 +34,8 @@ export default function JobPage() {
   const job = db.jobs.find((j) => j.id === params?.id);
   const [sosOpen, setSosOpen] = React.useState(false);
   const [rateOpen, setRateOpen] = React.useState(false);
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [payBusy, setPayBusy] = React.useState(false);
 
   if (!ready) return <Shell><div className="page" style={{ paddingTop: 90 }}><CardSkeleton /></div></Shell>;
   if (!job) return <Shell><TopBar back title="—" /><main className="page"><p className="t-body">{t('e.generic')}</p></main></Shell>;
@@ -113,20 +116,33 @@ export default function JobPage() {
         ) : null}
 
         {/* ---------------- worker accepting an open job ---------------- */}
-        {iAmWorker && job.status === 'open' ? (
-          <button className="btn" onClick={() => actions.hire(job.id, me.id!, Math.round((job.priceMin + job.priceMax) / 2))}>
-            ✓ {t('j.accept')}
-          </button>
+        {iAmWorker && job.status === 'requested' ? (
+          <>
+            {job.photos?.length ? (
+              <div className="grid-2">
+                {job.photos.map((src, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={src} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 14, border: '1px solid var(--glass-edge)' }} />
+                ))}
+              </div>
+            ) : null}
+            <button className="btn" onClick={() => actions.acceptBooking(job.id, me.id!, amountFor(job))}>
+              ✓ {t('j.accept')}
+            </button>
+            <button className="btn quiet" onClick={() => actions.cancelBooking(job.id, 'worker')}>
+              {t('c.no')}
+            </button>
+          </>
         ) : null}
 
         {/* ---------------- job progress ---------------- */}
-        {worker && job.status !== 'open' ? (
+        {worker && job.status !== 'requested' ? (
           <Reveal delay={0.04}>
             <GlassCard className="pad v-3">
               <p className="t-micro">{t('n.jobs')}</p>
               {iAmWorker ? (
                 <>
-                  {job.status === 'assigned' ? <button className="btn" onClick={() => setStatus('on_the_way')}>🛵 {t('j.track')}</button> : null}
+                  {job.status === 'accepted' ? <button className="btn" onClick={() => setStatus('on_the_way')}>🛵 {t('j.track')}</button> : null}
                   {job.status === 'on_the_way' ? <button className="btn" onClick={() => setStatus('working')}>📍 {t('j.arrived')}</button> : null}
                   {job.status === 'working' ? <button className="btn" onClick={() => setStatus('worker_done')}>✓ {t('j.finish')}</button> : null}
                   {job.status === 'worker_done' ? <p className="note gd">{t('j.worker_done')}</p> : null}
@@ -146,37 +162,120 @@ export default function JobPage() {
         ) : null}
 
         {/* ---------------- payment ---------------- */}
-        {worker && job.status !== 'open' ? (
+        {worker && job.status !== 'requested' ? (
           <Reveal delay={0.04}>
-            <GlassCard className="flat pad">
+            <GlassCard className="pad">
               <p className="t-micro" style={{ marginBottom: 10 }}>{t('y.title')}</p>
-              <div className="kv"><span className="k">{t('y.agreed')}</span><span className="v t-num"><Money amount={job.agreedAmount ?? job.priceMin} /></span></div>
-              <div className="kv"><span className="k">{t('c.done')}</span><span className="v">{job.paymentStatus === 'paid' ? `✅ ${t('y.paid')}` : `⏳ ${t('y.pending')}`}</span></div>
-              {!iAmWorker ? (
+              <div className="kv" style={{ paddingTop: 0 }}>
+                <span className="k">{t('y.agreed')}</span>
+                <span className="v t-num"><Money amount={amountFor(job)} /></span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('c.done')}</span>
+                <span className="v">{t(statusKey(job.payment.status) as any)}</span>
+              </div>
+
+              {job.payment.protected ? (
+                <p className="note em" style={{ marginTop: 12 }}>🛡️ {t('y.noteProtected')}</p>
+              ) : null}
+
+              {!iAmWorker && job.payment.status === 'unpaid' ? (
                 <>
-                  <p className="label" style={{ marginTop: 14 }}>{t('y.method')}</p>
+                  <p className="label" style={{ marginTop: 14 }}>{t('y.choose')}</p>
                   <div className="h-2 wrap" style={{ gap: 8 }}>
-                    {METHODS.map((m) => (
-                      <button key={m} className={`chip${job.paymentMethod === m ? ' on' : ''}`}
-                        onClick={() => actions.setPayment(job.id, m, job.paymentStatus === 'paid')}>
-                        {m === 'cash' ? t('y.cash') : m.toUpperCase()}
+                    {PAYMENT_METHODS.map((m) => (
+                      <button key={m.id} className={`chip${job.payment.method === m.id ? ' on' : ''}`}
+                        disabled={payBusy}
+                        onClick={async () => {
+                          setPayBusy(true);
+                          const p = await createOrder(job.id, amountFor(job), m.id);
+                          actions.setPayment(job.id, p);
+                          setPayBusy(false);
+                        }}>
+                        {m.icon} {t(m.key as any)}
                       </button>
                     ))}
                   </div>
-                  {job.paymentMethod && job.paymentStatus !== 'paid' ? (
-                    <button className="btn ghost md" style={{ width: '100%', marginTop: 12 }}
-                      onClick={() => actions.setPayment(job.id, job.paymentMethod!, true)}>
-                      ✓ {t('y.markPaid')}
-                    </button>
-                  ) : null}
                 </>
+              ) : null}
+
+              {!iAmWorker && job.payment.status === 'authorized' ? (
+                <button className="btn" style={{ marginTop: 14 }} disabled={payBusy}
+                  onClick={async () => {
+                    setPayBusy(true);
+                    actions.setPayment(job.id, await holdFunds(job.payment));
+                    setPayBusy(false);
+                  }}>
+                  🔒 {t('y.payNow')} · <Money amount={amountFor(job)} />
+                </button>
+              ) : null}
+
+              {!iAmWorker && job.status === 'completed' && job.payment.status === 'held' ? (
+                <button className="btn" style={{ marginTop: 14 }} disabled={payBusy}
+                  onClick={async () => {
+                    setPayBusy(true);
+                    actions.setPayment(job.id, await releaseFunds(job.payment));
+                    setPayBusy(false);
+                  }}>
+                  ✓ {t('y.release')}
+                </button>
+              ) : null}
+
+              {!iAmWorker && job.payment.method === 'cash' && job.payment.status === 'unpaid' && job.status === 'completed' ? (
+                <button className="btn ghost md" style={{ width: '100%', marginTop: 14 }}
+                  onClick={() => actions.setPayment(job.id, markCashPaid(job.payment))}>
+                  ✓ {t('y.markPaid')}
+                </button>
+              ) : null}
+
+              <div className="h-2 wrap" style={{ gap: 7, marginTop: 14 }}>
+                {TRUST_POINTS.map((p) => (
+                  <span key={p.key} className="tag em" style={{ fontSize: 11 }}>{p.icon} {t(p.key as any)}</span>
+                ))}
+              </div>
+              <p className="t-xs" style={{ marginTop: 10 }}>ℹ️ {t('y.offPlatform')}</p>
+              <p className="t-xs" style={{ marginTop: 6 }}>🧪 {t('y.simNote')}</p>
+            </GlassCard>
+          </Reveal>
+        ) : null}
+
+        {/* ---------------- cancellation policy, always visible ---------------- */}
+        {job.status !== 'completed' && !job.status.startsWith('cancelled') ? (
+          <Reveal delay={0.04}>
+            <GlassCard className="flat pad">
+              <p className="t-micro" style={{ marginBottom: 10 }}>{t('cx.policyTitle')}</p>
+              {POLICY_ROWS.map((r) => (
+                <div className="kv" key={r.whenKey}>
+                  <span className="k">{r.icon} {t(r.whenKey as any)}</span>
+                  <span className="v">{t(r.costKey as any)}</span>
+                </div>
+              ))}
+              {canCancel(job, iAmWorker ? 'worker' : 'client') ? (
+                <button className="btn quiet" style={{ marginTop: 10 }} onClick={() => setCancelOpen(true)}>
+                  {t('cx.cancel')}
+                </button>
               ) : null}
             </GlassCard>
           </Reveal>
         ) : null}
 
+        {job.cancellation ? (
+          <GlassCard className="flat pad-s">
+            <p className="t-sm strong">{t(`j.${job.status}` as any)}</p>
+            {job.cancellation.fee > 0
+              ? <p className="t-xs" style={{ marginTop: 6 }}>{t('cx.feeNotice')} <Money amount={job.cancellation.fee} /></p>
+              : <p className="t-xs" style={{ marginTop: 6 }}>{t('cx.costFree')}</p>}
+            {job.cancellation.by === 'worker' && !iAmWorker ? (
+              <button className="btn ghost md" style={{ width: '100%', marginTop: 12 }}
+                onClick={() => router.push(`/search?cat=${job.category}${job.serviceId ? `&svc=${job.serviceId}` : ''}`)}>
+                {t('cx.findReplacement')}
+              </button>
+            ) : null}
+          </GlassCard>
+        ) : null}
+
         {/* ---------------- messages ---------------- */}
-        {worker && job.status !== 'open' ? <Chat jobId={job.id} /> : null}
+        {worker && job.status !== 'requested' ? <Chat jobId={job.id} /> : null}
 
         {/* ---------------- share ---------------- */}
         <a className="btn quiet" href={waShare(jobShareText(job.title, job.geo.areaName, origin(), job.id))}
@@ -190,6 +289,8 @@ export default function JobPage() {
         <SosButton onOpen={() => setSosOpen(true)} />
       ) : null}
       <SosSheet open={sosOpen} onClose={() => setSosOpen(false)} jobId={job.id} context={job.title} />
+
+      <CancelSheet open={cancelOpen} onClose={() => setCancelOpen(false)} jobId={job.id} by={iAmWorker ? 'worker' : 'client'} />
 
       <RateSheet open={rateOpen} onClose={() => setRateOpen(false)} jobId={job.id} workerId={job.assignedWorkerId} />
 
@@ -438,6 +539,46 @@ function RateSheet({ open, onClose, jobId, workerId }: { open: boolean; onClose:
           onClick={() => { addReview(jobId, workerId, me.name || 'A neighbour', stars, text.trim(), tags); onClose(); }}>
           {t('r.submit')}
         </button>
+      </div>
+    </Sheet>
+  );
+}
+
+
+/* ============================================================ CANCEL */
+
+function CancelSheet({ open, onClose, jobId, by }: { open: boolean; onClose: () => void; jobId: string; by: 'client' | 'worker' }) {
+  const { db } = useStore();
+  const { t } = useT();
+  const { cancelBooking } = useActions();
+  const [reason, setReason] = React.useState('');
+  const job = db.jobs.find((j) => j.id === jobId);
+  if (!job) return null;
+  const terms = cancelTerms(job, by);
+
+  return (
+    <Sheet open={open} onClose={onClose} title={t('cx.cancel')}>
+      <div className="v-4">
+        <p className="t-body" style={{ color: 'var(--ink)' }}>{t(terms.reasonKey as any)}</p>
+
+        <GlassCard className="flat pad-s">
+          <div className="between">
+            <span className="t-sm">{t('cx.feeNotice')}</span>
+            <span className="t-h3">{terms.free ? t('cx.costFree') : <Money amount={terms.fee} />}</span>
+          </div>
+          <p className="t-xs" style={{ marginTop: 8 }}>{t(terms.nextKey as any)}</p>
+        </GlassCard>
+
+        <div>
+          <label className="label" htmlFor="cxr">{t('cx.reason')}</label>
+          <input id="cxr" className="input" value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
+
+        <button className="btn" style={{ background: 'linear-gradient(135deg,#E5484D,#F5A623)' }}
+          onClick={() => { cancelBooking(jobId, by, reason.trim() || undefined); onClose(); }}>
+          {t('cx.cancel')}
+        </button>
+        <button className="btn quiet" onClick={onClose}>{t('cx.keep')}</button>
       </div>
     </Sheet>
   );

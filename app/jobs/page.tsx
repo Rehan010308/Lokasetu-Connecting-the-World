@@ -23,8 +23,9 @@ export default function JobsPage() {
     ? db.jobs.filter((j) => j.assignedWorkerId === me.id)
     : db.jobs.filter((j) => j.clientId === me.id);
 
-  const live = list.filter((j) => j.status !== 'completed' && j.status !== 'cancelled');
-  const past = list.filter((j) => j.status === 'completed' || j.status === 'cancelled');
+  const DEAD = ['completed', 'cancelled_by_client', 'cancelled_by_worker', 'expired'];
+  const live = list.filter((j) => !DEAD.includes(j.status));
+  const past = list.filter((j) => DEAD.includes(j.status));
 
   return (
     <Shell>
@@ -49,7 +50,7 @@ export default function JobsPage() {
         ) : null}
 
         {!isWorker ? (
-          <Link href="/post" className="btn" style={{ marginTop: 8 }}>➕ {t('p.title')}</Link>
+          <Link href="/book" className="btn" style={{ marginTop: 8 }}>➕ {t('b.request')}</Link>
         ) : null}
       </main>
       <Dock items={isWorker ? navWorker(t) : navNormal(t)} />
@@ -59,7 +60,9 @@ export default function JobsPage() {
 
 function JobRow({ job, lang, t, db }: any) {
   const w = job.assignedWorkerId ? db.workers.find((x: any) => x.id === job.assignedWorkerId) : null;
-  const tone = job.status === 'completed' ? 'em' : job.status === 'open' ? 'in' : 'gd';
+  const tone = job.status === 'completed' ? 'em'
+    : job.status === 'requested' ? 'in'
+    : job.status.startsWith('cancelled') || job.status === 'expired' ? 'red' : 'gd';
   return (
     <Link href={`/job/${job.id}`} style={{ display: 'block' }}>
       <GlassCard interactive className="pad-s">

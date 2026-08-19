@@ -226,23 +226,47 @@ const en = {
   'e.generic': 'Something went wrong. Please try again.',
 } as const;
 
-export type TKey = keyof typeof en;
+/** Keys defined as one dictionary per language. */
+export type CoreKey = keyof typeof en;
 
 /** COMPLETE dictionary. Missing a key here is a compile error, by design. */
-export type Dict = Record<TKey, string>;
+export type Dict = Record<CoreKey, string>;
 
 import { hi, ta, te, kn, ml } from './i18n-a';
 import { mr, bn, gu, pa } from './i18n-b';
+import { BOOK, type BookKey } from './i18n-book';
+import { PAY, type PayKey } from './i18n-pay';
 
-const DICTS: Record<LangCode, Dict> = { en, hi, ta, te, kn, ml, mr, bn, gu, pa };
+/**
+ * Booking, payment and trust strings are stored the other way round — one
+ * entry per key holding all ten languages — because that shape is far easier
+ * to review and keeps related translations side by side. `satisfies` in those
+ * files enforces the same completeness guarantee.
+ */
+export type TKey = CoreKey | BookKey | PayKey;
+
+const CORE: Record<LangCode, Dict> = { en, hi, ta, te, kn, ml, mr, bn, gu, pa };
+
+const WIDE = { ...BOOK, ...PAY } as Record<string, Record<LangCode, string>>;
+
+/** Flattened per-language lookup, built once. */
+const DICTS: Record<LangCode, Record<string, string>> = (() => {
+  const out = {} as Record<LangCode, Record<string, string>>;
+  for (const l of Object.keys(CORE) as LangCode[]) {
+    const merged: Record<string, string> = { ...(CORE[l] as Record<string, string>) };
+    for (const k of Object.keys(WIDE)) merged[k] = WIDE[k][l];
+    out[l] = merged;
+  }
+  return out;
+})();
 
 export function t(lang: LangCode, key: TKey): string {
-  return DICTS[lang][key];
+  return DICTS[lang][key as string];
 }
 
 export function makeT(lang: LangCode) {
   const d = DICTS[lang];
-  return (key: TKey) => d[key];
+  return (key: TKey) => d[key as string];
 }
 
 export function langMeta(code: LangCode) {
@@ -258,5 +282,5 @@ export function langNative(code: LangCode): string {
 }
 
 /** Used by the self-test to prove no language is missing or untranslated. */
-export const ALL_KEYS = Object.keys(en) as TKey[];
+export const ALL_KEYS = [...Object.keys(en), ...Object.keys(WIDE)] as TKey[];
 export { en as ENGLISH, DICTS };

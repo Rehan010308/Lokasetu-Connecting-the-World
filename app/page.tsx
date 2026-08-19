@@ -14,6 +14,9 @@ import { Dock, GlassCard, Magnetic, Reveal, Stagger, StaggerItem, VoiceOrb } fro
 import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
 
+/** Statuses that mean the job is over, one way or another. */
+const DEAD_STATUSES: string[] = ['completed', 'cancelled_by_client', 'cancelled_by_worker', 'expired'];
+
 /* The six things people actually search for most. Fewer, bigger targets. */
 const QUICK = ['fan_repair', 'leak_repair', 'home_cleaning', 'maid', 'ac_service', 'car_driver'];
 
@@ -46,7 +49,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
   const { t, lang } = useT();
 
   const myJobs = db.jobs
-    .filter((j) => j.clientId === me.id && j.status !== 'completed' && j.status !== 'cancelled')
+    .filter((j) => j.clientId === me.id && !DEAD_STATUSES.includes(j.status))
     .slice(0, 3);
 
   /** Search jumps straight to the best-matching service — never a dead end. */
@@ -57,7 +60,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
     if (hits.length) {
       router.push(`/search?cat=${hits[0].service.category}&svc=${hits[0].service.id}`);
     } else {
-      router.push(`/post?q=${encodeURIComponent(text)}`);
+      router.push(`/book?q=${encodeURIComponent(text)}`);
     }
   }
 
@@ -140,10 +143,10 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
                           {j.title}
                         </div>
                         <div className="t-xs" style={{ marginTop: 3 }}>
-                          {w ? `👷 ${w.name}` : t('j.open')}
+                          {w ? `👷 ${w.name}` : t('j.requested')}
                         </div>
                       </div>
-                      <span className={`tag ${j.status === 'open' ? 'in' : 'em'}`}>{t(`j.${j.status}` as any)}</span>
+                      <span className={`tag ${j.status === 'requested' ? 'in' : 'em'}`}>{t(`j.${j.status}` as any)}</span>
                     </div>
                   </GlassCard>
                 </Link>
@@ -189,14 +192,14 @@ function WorkerHome() {
 
   /* Jobs this worker can actually do, inside the radius they chose. */
   const feed = db.jobs
-    .filter((j) => j.status === 'open')
+    .filter((j) => j.status === 'requested')
     .map((j) => {
       const [m] = rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]);
       return m ? { job: j, km: m.km } : null;
     })
     .filter(Boolean) as { job: typeof db.jobs[number]; km: number }[];
 
-  const active = db.jobs.filter((j) => j.assignedWorkerId === w.id && j.status !== 'completed' && j.status !== 'cancelled');
+  const active = db.jobs.filter((j) => j.assignedWorkerId === w.id && !DEAD_STATUSES.includes(j.status));
 
   return (
     <Shell>

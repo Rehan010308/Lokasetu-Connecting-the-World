@@ -2,9 +2,11 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type {
-  Client, DB, Job, JobStatus, LangCode, Message, MessageKind, PaymentMethod,
-  Review, Role, SosEvent, Verification, Worker,
+  Cancellation, Client, DB, Job, JobStatus, LangCode, Message, MessageKind,
+  Payment, PaymentMethod, Review, Role, SosEvent, Verification, Worker,
 } from '@/lib/types';
+import { EMPTY_PAYMENT, amountFor } from '@/lib/payments';
+import { cancelTerms, type CancelActor } from '@/lib/cancellation';
 import { seedDB, DEMO_ACCOUNTS } from '@/lib/seed';
 import { makeT, type TKey } from '@/lib/i18n';
 
@@ -171,9 +173,24 @@ export function useActions() {
       update((d) => ({ ...d, clients: d.clients.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
     },
 
-    postJob(job: Omit<Job, 'id' | 'createdAt'>): string {
-      const id = newId('j');
-      update((d) => ({ ...d, jobs: [{ ...job, id, createdAt: Date.now() }, ...d.jobs] }));
+    /**
+     * A customer REQUESTS a booking. It is not assigned to anyone yet — the
+     * request goes to every suitable worker and they choose to accept.
+     */
+    requestBooking(job: Omit<Job, 'id' | 'createdAt' | 'status' | 'payment'>, workerIds: string[]): string {
+      const id = newId('bk');
+      const now = Date.now();
+      update((d) => ({
+        ...d,
+        jobs: [{
+          ...job, id,
+          status: 'requested' as JobStatus,
+          requestedWorkerIds: workerIds,
+          requestedAt: now,
+          payment: { ...EMPTY_PAYMENT },
+          createdAt: now,
+        }, ...d.jobs],
+      }));
       return id;
     },
 
@@ -181,26 +198,61 @@ export function useActions() {
       update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, ...patch } : j)) }));
     },
 
-    hire(jobId: string, workerId: string, amount: number) {
+    /** A worker accepts a request. This is the only way a job gets assigned. */
+    acceptBooking(jobId: string, workerId: string, amount: number) {
       update((d) => ({
         ...d,
         jobs: d.jobs.map((j) => (j.id === jobId
-          ? { ...j, status: 'assigned' as JobStatus, assignedWorkerId: workerId, agreedAmount: amount, paymentStatus: 'pending' as const }
+          ? {
+              ...j,
+              status: 'accepted' as JobStatus,
+              assignedWorkerId: workerId,
+              agreedAmount: amount,
+              acceptedAt: Date.now(),
+            }
           : j)),
       }));
     },
 
+    /**
+     * Cancel, applying the published policy. The same cancelTerms() the UI
+     * displays is the one used here, so what the customer was shown is exactly
+     * what they are charged.
+     */
+    cancelBooking(jobId: string, by: CancelActor, reason?: string) {
+      update((d) => ({
+        ...d,
+        jobs: d.jobs.map((j) => {
+          if (j.id !== jobId) return j;
+          const terms = cancelTerms(j, by);
+          const cancellation: Cancellation = {
+            by, at: Date.now(), reason, fee: terms.fee,
+            refunded: j.payment.status === 'held' || j.payment.status === 'authorized',
+          };
+          return {
+            ...j,
+            status: (by === 'client' ? 'cancelled_by_client' : 'cancelled_by_worker') as JobStatus,
+            cancellation,
+            payment: cancellation.refunded
+              ? { ...j.payment, status: 'refunded' as const, amount: Math.max(0, (j.payment.amount ?? 0) - terms.fee), protected: false }
+              : j.payment,
+          };
+        }),
+      }));
+    },
+
+    /** Advance the job, stamping the timestamp the cancellation policy needs. */
     setStatus(jobId: string, status: JobStatus) {
-      update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status } : j)) }));
+      const stamp: Partial<Job> =
+        status === 'on_the_way' ? { travelStartedAt: Date.now() }
+        : status === 'working'  ? { startedAt: Date.now() }
+        : status === 'completed'? { completedAt: Date.now() }
+        : {};
+      update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status, ...stamp } : j)) }));
     },
 
-    setPayment(jobId: string, method: PaymentMethod, paid: boolean) {
-      update((d) => ({
-        ...d,
-        jobs: d.jobs.map((j) => (j.id === jobId
-          ? { ...j, paymentMethod: method, paymentStatus: paid ? 'paid' as const : 'pending' as const }
-          : j)),
-      }));
+    setPayment(jobId: string, payment: Payment) {
+      update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, payment } : j)) }));
     },
 
     /**

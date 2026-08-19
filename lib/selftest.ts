@@ -16,6 +16,8 @@ import { parseRequest } from './ai/request';
 import { suggestPrice } from './ai/pricing';
 import { rankWorkers, etaMinutes } from './ai/match';
 import { isValidAadhaarFormat, verifyIdentity } from './verify';
+import { PAYMENT_METHODS, EMPTY_PAYMENT, createOrder, holdFunds, releaseFunds, refund, methodInfo, statusKey } from './payments';
+import { cancelTerms, canCancel, travelFee, POLICY_ROWS } from './cancellation';
 import { telLink, waLink, navigateLink, sosMessage, e164, workerShareText } from './links';
 import { distanceKm, formatKm } from './geo';
 
@@ -208,7 +210,51 @@ import { distanceKm, formatKm } from './geo';
   ok('no points, ranks or trust scores on any worker',
      db.workers.every((w) => !('trust' in w) && !('points' in w) && !('tier' in w)));
 
-  /* ==================================================== 10. GEO / ETA */
+  /* ==================================================== 10. BOOKING FLOW */
+  section('Booking lifecycle');
+  const bk = db.jobs[0];
+  ok('seed bookings start as requested, not assigned', db.jobs.every(j => j.status === 'requested'));
+  ok('a booking has nobody assigned until a worker accepts', db.jobs.every(j => !j.assignedWorkerId));
+  ok('every booking carries a payment record', db.jobs.every(j => !!j.payment && j.payment.status === 'unpaid'));
+  ok('booking captures time preference and duration', !!bk.timePref && !!bk.duration, `${bk.timePref} / ${bk.duration}`);
+
+  /* ==================================================== 11. PAYMENTS */
+  section('Payments');
+  ok('7 payment methods offered', PAYMENT_METHODS.length === 7, PAYMENT_METHODS.map(m => m.id).join(','));
+  ok('cash is the only method that cannot be protected',
+     PAYMENT_METHODS.filter(m => !m.protectable).map(m => m.id).join(',') === 'cash');
+
+  const order = await createOrder('bk_test', 500, 'upi');
+  ok('UPI order is authorised and protected', order.status === 'authorized' && order.protected, order.orderRef);
+  const held = await holdFunds(order);
+  ok('capture moves money to held', held.status === 'held' && held.protected);
+  const released = await releaseFunds(held);
+  ok('release pays the worker and drops protection', released.status === 'released' && !released.protected);
+  const back = await refund(held, 40);
+  ok('refund returns the amount minus the fee', back.status === 'refunded' && back.amount === 460, `₹${back.amount}`);
+
+  const cashOrder = await createOrder('bk_test', 500, 'cash');
+  ok('cash is never marked protected', cashOrder.status === 'unpaid' && !cashOrder.protected);
+  ok('every payment state has a label', ['unpaid','authorized','held','released','refunded'].every(s => !!statusKey(s)));
+  ok('order references are deterministic',
+     (await createOrder('bk_x', 100, 'upi')).orderRef === (await createOrder('bk_x', 100, 'upi')).orderRef);
+
+  /* ==================================================== 12. CANCELLATION */
+  section('Cancellation policy');
+  const mk = (status, extra = {}) => ({ ...db.jobs[0], status, agreedAmount: 300, payment: { ...EMPTY_PAYMENT }, ...extra });
+  ok('cancelling before acceptance is free', cancelTerms(mk('requested'), 'client').free);
+  ok('cancelling before the worker sets off is free', cancelTerms(mk('accepted'), 'client').free);
+  const travelling = cancelTerms(mk('on_the_way'), 'client');
+  ok('cancelling after travel starts has a fee', !travelling.free && travelling.fee > 0, `₹${travelling.fee}`);
+  ok('the fee is capped at ₹100', travelFee(mk('on_the_way', { agreedAmount: 99999 })) <= 100, `₹${travelFee(mk('on_the_way', { agreedAmount: 99999 }))}`);
+  ok('a worker cancelling never charges the customer', cancelTerms(mk('on_the_way'), 'worker').free);
+  ok('worker cancellation offers a replacement', cancelTerms(mk('on_the_way'), 'worker').nextKey === 'cx.replacementOffered');
+  ok('a completed job cannot be cancelled', !canCancel(mk('completed'), 'client'));
+  ok('policy is published as 4 rows', POLICY_ROWS.length === 4);
+  ok('every policy row has a translated label and cost',
+     POLICY_ROWS.every(r => !!DICTS.hi[r.whenKey] && !!DICTS.hi[r.costKey]));
+
+  /* ==================================================== 13. GEO / ETA */
   section('Distance and ETA');
   const d = distanceKm({ lat: 12.9352, lng: 77.6245 }, { lat: 12.9121, lng: 77.6446 });
   ok('Koramangala to HSR is 2-6 km', d > 2 && d < 6, formatKm(d));

@@ -1,4 +1,5 @@
 import type { Client, DB, Job, Review, Worker } from './types';
+import { EMPTY_PAYMENT } from './payments';
 import { AREAS } from './geo';
 
 const T = 1735689600000; // fixed epoch so server and client render identically
@@ -175,9 +176,11 @@ const jobs: Job[] = [
     rawRequest: 'Ceiling fan is making noise and stops sometimes, need someone today',
     lang: 'en', category: 'electrical', serviceId: 'fan_repair',
     whenText: 'today evening', urgency: 'today', estimatedHours: 1,
+    timePref: 'today', duration: 'hr1', photos: [],
     geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
     priceMin: 240, priceMax: 350, priceBasis: 'standard rate · 1 hour · same day',
-    status: 'open', createdAt: T - 3600000 * 4,
+    status: 'requested', payment: { ...EMPTY_PAYMENT },
+    requestedAt: T - 3600000 * 4, createdAt: T - 3600000 * 4,
   },
   {
     id: 'j2', clientId: 'b_demo', clientRole: 'business',
@@ -185,9 +188,11 @@ const jobs: Job[] = [
     rawRequest: 'दुकान के लिए हफ्ते में 3 दिन सफाई वाला चाहिए',
     lang: 'hi', category: 'cleaning', serviceId: 'home_cleaning',
     whenText: 'this week', urgency: 'this_week', estimatedHours: 2,
+    timePref: 'tomorrow', duration: 'hr2', photos: [],
     geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
     priceMin: 500, priceMax: 700, priceBasis: 'standard rate · 2 hours · no rush',
-    status: 'open', createdAt: T - 3600000 * 20,
+    status: 'requested', payment: { ...EMPTY_PAYMENT },
+    requestedAt: T - 3600000 * 20, createdAt: T - 3600000 * 20,
   },
   {
     id: 'j3', clientId: 's_demo', clientRole: 'society',
@@ -195,9 +200,11 @@ const jobs: Job[] = [
     rawRequest: 'We need water tank cleaning for 3 towers before the monsoon',
     lang: 'en', category: 'maintenance', serviceId: 'water_tank_clean',
     whenText: 'this week', urgency: 'this_week', estimatedHours: 6,
+    timePref: 'scheduled', duration: 'halfday', photos: [],
     geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
     priceMin: 2800, priceMax: 3900, priceBasis: 'standard rate · 6 hours · no rush',
-    status: 'open', createdAt: T - 3600000 * 30,
+    status: 'requested', payment: { ...EMPTY_PAYMENT },
+    requestedAt: T - 3600000 * 30, createdAt: T - 3600000 * 30,
   },
 ];
 

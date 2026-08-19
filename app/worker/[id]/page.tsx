@@ -168,8 +168,8 @@ function Profile() {
           <span className="t-xs">{t('p.estimate')}</span>
           {price ? <span className="t-sm strong t-num"><Money amount={price.min} />–<Money amount={price.max} /></span> : null}
         </div>
-        <button className="btn" onClick={() => router.push(`/post?worker=${w.id}${svc ? `&svc=${svc}` : ''}`)}>
-          {t('w.hire')} {w.name.split(' ')[0]} →
+        <button className="btn" onClick={() => router.push(`/book?worker=${w.id}${svc ? `&svc=${svc}&cat=${w.category}` : ''}`)}>
+          {t('b.request')} →
         </button>
       </div>
 
