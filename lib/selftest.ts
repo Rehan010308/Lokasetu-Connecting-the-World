@@ -213,10 +213,65 @@ import { distanceKm, formatKm } from './geo';
   /* ==================================================== 10. BOOKING FLOW */
   section('Booking lifecycle');
   const bk = db.jobs[0];
-  ok('seed bookings start as requested, not assigned', db.jobs.every(j => j.status === 'requested'));
-  ok('a booking has nobody assigned until a worker accepts', db.jobs.every(j => !j.assignedWorkerId));
-  ok('every booking carries a payment record', db.jobs.every(j => !!j.payment && j.payment.status === 'unpaid'));
+  const open_ = db.jobs.filter(j => j.status === 'requested');
+  const doneJobs = db.jobs.filter(j => j.status === 'completed');
+  const DEADSET = ['completed', 'cancelled_by_client', 'cancelled_by_worker', 'expired'];
+
+  ok('every booking carries a payment record', db.jobs.every(j => !!j.payment));
+  ok('an unaccepted request has nobody assigned', open_.every(j => !j.assignedWorkerId));
+  ok('an unaccepted request has taken no money', open_.every(j => j.payment.status === 'unpaid'));
+  ok('anything past requested has a worker on it',
+     db.jobs.filter(j => !['requested', 'draft', 'expired'].includes(j.status)).every(j => !!j.assignedWorkerId));
   ok('booking captures time preference and duration', !!bk.timePref && !!bk.duration, `${bk.timePref} / ${bk.duration}`);
+  ok('every finished job records when it finished', doneJobs.every(j => !!j.completedAt));
+  ok('finished jobs have settled their money',
+     doneJobs.every(j => j.payment.status === 'released' || j.payment.method === 'cash'));
+  ok('a cancelled job carries its cancellation terms',
+     db.jobs.filter(j => j.status.startsWith('cancelled')).every(j => !!j.cancellation));
+
+  /* ============================== 10b. THE DEMO HAS SOMETHING TO DEMONSTRATE */
+  section('Demo data is demoable');
+  const DEMO_IDS = ['w_demo', 'c_demo', 's_demo', 'b_demo'];
+  const jobsFor = (id: string) => db.jobs.filter(j => j.clientId === id || j.assignedWorkerId === id);
+
+  for (const id of DEMO_IDS) {
+    const list = jobsFor(id);
+    ok(`${id} has work in flight`, list.some(j => !DEADSET.includes(j.status)), `${list.length} jobs total`);
+    ok(`${id} has finished work to show`, list.some(j => j.status === 'completed'));
+  }
+
+  const HOUR = 3600000;
+  const wDemoDone = db.jobs.filter(j => j.assignedWorkerId === 'w_demo' && j.status === 'completed');
+  const earned = (h: number) => wDemoDone
+    .filter(j => (j.completedAt ?? 0) > Date.now() - h * HOUR)
+    .reduce((sum, j) => sum + (j.agreedAmount ?? 0), 0);
+  ok('the demo worker earned something today', earned(24) > 0, `Rs ${earned(24)}`);
+  ok('the demo worker earned more this week', earned(24 * 7) > earned(24), `Rs ${earned(24 * 7)}`);
+  ok('the demo worker earned more this month', earned(24 * 30) > earned(24 * 7), `Rs ${earned(24 * 30)}`);
+
+  ok('the demo worker is mid-journey on a live job',
+     db.jobs.some(j => j.assignedWorkerId === 'w_demo' && j.status === 'on_the_way'));
+  ok('a job is waiting on the customer to confirm',
+     db.jobs.some(j => j.status === 'worker_done'));
+
+  ok('conversations exist', db.messages.length > 0, `${db.messages.length} messages`);
+  ok('every message belongs to a real job', db.messages.every(m => db.jobs.some(j => j.id === m.jobId)));
+  ok('conversations include voice notes and quick replies',
+     db.messages.some(m => m.kind === 'voice') && db.messages.some(m => m.kind === 'quick'));
+  ok('a voice note keeps the language it was spoken in',
+     db.messages.filter(m => m.kind === 'voice').every(m => !!m.lang));
+  ok('quotes exist and point at real jobs',
+     db.quotes.length > 0 && db.quotes.every(q => db.jobs.some(j => j.id === q.jobId)), `${db.quotes.length} quotes`);
+  ok('every quote comes from a real worker',
+     db.quotes.every(q => db.workers.some(w => w.id === q.workerId)));
+  ok('the SOS log points at a real job',
+     db.sos.length > 0 && db.sos.every(e => db.jobs.some(j => j.id === e.jobId)));
+
+  ok('resetting hands out fresh objects, not shared ones', (() => {
+    const a = seedDB(); const b = seedDB();
+    a.jobs[0].title = 'mutated';
+    return b.jobs[0].title !== 'mutated';
+  })());
 
   /* ==================================================== 11. PAYMENTS */
   section('Payments');

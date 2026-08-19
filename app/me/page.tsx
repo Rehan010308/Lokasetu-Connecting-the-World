@@ -13,6 +13,7 @@ import { useActions, useMe, useStore, useT } from '@/components/store';
 import { Dock, GlassCard, Reveal } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
+import { ClientPanel, WorkerPanel } from '@/components/panels';
 
 export default function MePage() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function MePage() {
   const isWorker = me.role === 'worker';
 
   return (
-    <Shell>
+    <Shell aside={isWorker && w ? <WorkerPanel worker={w} /> : <ClientPanel />}>
       <TopBar glassy title={t('n.profile')} right={<HeaderTools />} />
       <main className="page v-4" style={{ paddingTop: 4 }}>
 
@@ -155,6 +156,15 @@ export default function MePage() {
             <p className="t-xs" style={{ marginTop: 6 }}>{t('x.contactSet')}</p>
           </div>
         </GlassCard>
+
+        <Link href="/trust" className="choice" style={{ minHeight: 66 }}>
+          <span className="lead" aria-hidden>🛡️</span>
+          <span>
+            <span className="ttl">{t('ts.title')}</span><br />
+            <span className="sub">{t('ts.sub')}</span>
+          </span>
+          <span className="mark" aria-hidden>›</span>
+        </Link>
 
         <button className="btn ghost" onClick={() => { logout(); router.push('/login'); }}>{t('c.logout')}</button>
         <button className="btn quiet" onClick={() => { reset(); router.push('/login'); }}>♻️ Reset demo data</button>

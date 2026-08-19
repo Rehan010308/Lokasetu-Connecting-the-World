@@ -1,17 +1,52 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LANGUAGES, speechLocale } from '@/lib/i18n';
 import type { LangCode, Verification } from '@/lib/types';
 import { useActions, useT } from './store';
 import { ThemeToggle } from './theme';
-import { GlassCard, Sheet, VoiceOrb, AudioBars } from './aurora';
+import { GlassCard, Sheet, VoiceOrb, AudioBars, useDesktop } from './aurora';
 
 /* --------------------------------------------------------------- structure */
 
-export function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
-  return <div className={wide ? 'shell wide' : 'shell'}>{children}</div>;
+/**
+ * Page frame.
+ *
+ * On a phone this is exactly what it always was: one column, nothing else.
+ * On a laptop the same markup becomes a three-panel deck — navigation rail,
+ * reading column, context panel — laid out by CSS grid in globals.css §18.
+ *
+ * `aside` is DESKTOP-ONLY context. Never put anything essential in it: below
+ * 1024px it is not rendered at all, so a phone must never depend on it.
+ */
+export function Shell({
+  children, wide, aside,
+}: {
+  children: React.ReactNode; wide?: boolean; aside?: React.ReactNode;
+}) {
+  const desktop = useDesktop();
+  return (
+    <div className={wide ? 'shell wide' : 'shell'}>
+      {children}
+      {aside && desktop ? <aside className="rail-r no-print">{aside}</aside> : null}
+    </div>
+  );
+}
+
+/** A titled block inside the right-hand context panel. */
+export function Panel({
+  title, children, icon,
+}: { title?: string; children: React.ReactNode; icon?: string }) {
+  return (
+    <section className="glass pad v-3">
+      {title ? (
+        <h2 className="t-h3">{icon ? <span aria-hidden style={{ marginRight: 7 }}>{icon}</span> : null}{title}</h2>
+      ) : null}
+      {children}
+    </section>
+  );
 }
 
 export function TopBar({
@@ -250,6 +285,63 @@ export function Money({ amount }: { amount: number }) {
   return <>₹{Math.round(amount).toLocaleString('en-IN')}</>;
 }
 
-export function Empty({ text, icon = '🔎' }: { text: string; icon?: string }) {
-  return <div className="empty"><span className="big" aria-hidden>{icon}</span>{text}</div>;
+/**
+ * Empty state.
+ *
+ * An empty screen is the one moment a new user is most likely to give up, so
+ * it does more than announce the void: it names what is missing, says what to
+ * do about it, and offers the single button that does it. `tips` turns the
+ * dead end into a checklist — the fastest route out of an empty worker feed
+ * is a finished profile, so say so.
+ *
+ * `text` alone still renders the plain old version, so every existing call
+ * site keeps working untouched.
+ */
+export function Empty({
+  text, icon = '🔎', title, action, tips, children,
+}: {
+  text: string;
+  icon?: string;
+  title?: string;
+  action?: { href: string; label: string };
+  tips?: { icon: string; text: string; href?: string }[];
+  children?: React.ReactNode;
+}) {
+  const rich = Boolean(title || action || tips || children);
+  if (!rich) return <div className="empty"><span className="big" aria-hidden>{icon}</span>{text}</div>;
+
+  return (
+    <div className="empty smart">
+      <span className="big" aria-hidden>{icon}</span>
+      {title ? <h2 className="t-h2">{title}</h2> : null}
+      <p className="t-sm" style={{ maxWidth: 380, margin: '6px auto 0' }}>{text}</p>
+
+      {action ? (
+        <Link href={action.href} className="btn" style={{ marginTop: 20, maxWidth: 320 }}>
+          {action.label}
+        </Link>
+      ) : null}
+
+      {tips?.length ? (
+        <div className="tips">
+          {tips.map((tip) =>
+            tip.href ? (
+              <Link key={tip.text} href={tip.href} className="tip">
+                <span className="ic" aria-hidden>{tip.icon}</span>
+                <span className="tx">{tip.text}</span>
+                <span className="go" aria-hidden>›</span>
+              </Link>
+            ) : (
+              <div key={tip.text} className="tip">
+                <span className="ic" aria-hidden>{tip.icon}</span>
+                <span className="tx">{tip.text}</span>
+              </div>
+            )
+          )}
+        </div>
+      ) : null}
+
+      {children}
+    </div>
+  );
 }

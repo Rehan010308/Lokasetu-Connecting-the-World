@@ -132,7 +132,18 @@ function SearchInner() {
           ))}
         </div>
 
-        {shown.length === 0 ? <Empty text={t('s.none')} /> : (
+        {shown.length === 0 ? (
+          <Empty
+            icon="🔎"
+            title={t('x.noResTitle')}
+            text={t('s.none')}
+            action={{ href: `/search?cat=${cat}`, label: `↩ ${t('x.browseAll')}` }}
+            tips={[
+              { icon: '📍', text: t('s.fNear'), href: '/search' },
+              { icon: '➕', text: t('b.request'), href: `/book?cat=${cat}&svc=${svc}` },
+            ]}
+          />
+        ) : (
           <Stagger className="v-4" gap={0.06}>
             {shown.map((m) => (
               <StaggerItem key={m.worker.id}>

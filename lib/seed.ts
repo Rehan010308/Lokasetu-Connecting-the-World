@@ -1,4 +1,4 @@
-import type { Client, DB, Job, Review, Worker } from './types';
+import type { Client, DB, Job, Message, MessageKind, Quote, Review, SosEvent, Worker } from './types';
 import { EMPTY_PAYMENT } from './payments';
 import { AREAS } from './geo';
 
@@ -167,46 +167,341 @@ const reviews: Review[] = [
   rv('rv12', 'w6', 'Farah A.', 4, 'Deep cleaned the bathroom really well. Will call again.', ['clean'], 4),
 ];
 
-/* --------------------------------------------------------------- open jobs */
+/* ===========================================================================
+   LIVE DEMO DATA
+   ---------------------------------------------------------------------------
+   A judge signs in as a demo account and has roughly forty seconds to decide
+   whether this is a real product. An empty dashboard loses that argument
+   before a single feature is shown, so every demo account arrives with a
+   history: work in flight, work finished, money moved, conversations already
+   under way.
 
-const jobs: Job[] = [
-  {
-    id: 'j1', clientId: 'c_demo', clientRole: 'customer',
-    title: 'Ceiling fan makes noise and stops sometimes',
-    rawRequest: 'Ceiling fan is making noise and stops sometimes, need someone today',
-    lang: 'en', category: 'electrical', serviceId: 'fan_repair',
-    whenText: 'today evening', urgency: 'today', estimatedHours: 1,
-    timePref: 'today', duration: 'hr1', photos: [],
-    geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
-    priceMin: 240, priceMax: 350, priceBasis: 'standard rate · 1 hour · same day',
-    status: 'requested', payment: { ...EMPTY_PAYMENT },
-    requestedAt: T - 3600000 * 4, createdAt: T - 3600000 * 4,
-  },
-  {
-    id: 'j2', clientId: 'b_demo', clientRole: 'business',
-    title: 'दुकान के लिए हफ्ते में 3 दिन सफाई वाला चाहिए',
-    rawRequest: 'दुकान के लिए हफ्ते में 3 दिन सफाई वाला चाहिए',
-    lang: 'hi', category: 'cleaning', serviceId: 'home_cleaning',
-    whenText: 'this week', urgency: 'this_week', estimatedHours: 2,
-    timePref: 'tomorrow', duration: 'hr2', photos: [],
-    geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
-    priceMin: 500, priceMax: 700, priceBasis: 'standard rate · 2 hours · no rush',
-    status: 'requested', payment: { ...EMPTY_PAYMENT },
-    requestedAt: T - 3600000 * 20, createdAt: T - 3600000 * 20,
-  },
-  {
-    id: 'j3', clientId: 's_demo', clientRole: 'society',
-    title: 'Water tank cleaning for 3 towers',
-    rawRequest: 'We need water tank cleaning for 3 towers before the monsoon',
-    lang: 'en', category: 'maintenance', serviceId: 'water_tank_clean',
-    whenText: 'this week', urgency: 'this_week', estimatedHours: 6,
-    timePref: 'scheduled', duration: 'halfday', photos: [],
-    geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
-    priceMin: 2800, priceMax: 3900, priceBasis: 'standard rate · 6 hours · no rush',
-    status: 'requested', payment: { ...EMPTY_PAYMENT },
-    requestedAt: T - 3600000 * 30, createdAt: T - 3600000 * 30,
-  },
-];
+   These timestamps are built RELATIVE TO NOW, not to a fixed epoch, so the
+   worker dashboard says "earned today" and means today — whenever the demo is
+   opened. Safe for hydration because nothing reads the store until the
+   provider has flipped `ready`, which happens after mount.
+   =========================================================================== */
+
+const hour = 3600000;
+
+/** A settled payment, the way the gateway would leave it. */
+function paid(amount: number, method: Job['payment']['method'], at: number): Job['payment'] {
+  return { method, status: 'released', amount, orderRef: `order_${Math.abs(amount * 7919).toString(36)}`, protected: true, updatedAt: at };
+}
+function held(amount: number, method: Job['payment']['method'], at: number): Job['payment'] {
+  return { method, status: 'held', amount, orderRef: `order_${Math.abs(amount * 7919).toString(36)}`, protected: true, updatedAt: at };
+}
+
+function buildJobs(now: number): Job[] {
+  const ago = (h: number) => now - h * hour;
+
+  return [
+    /* ------------------------------------------------ waiting for a worker */
+    {
+      id: 'j1', clientId: 'c_demo', clientRole: 'customer',
+      title: 'Ceiling fan makes noise and stops sometimes',
+      rawRequest: 'Ceiling fan is making noise and stops sometimes, need someone today',
+      lang: 'en', category: 'electrical', serviceId: 'fan_repair',
+      whenText: 'today evening', urgency: 'today', estimatedHours: 1,
+      timePref: 'today', duration: 'hr1', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 240, priceMax: 350, priceBasis: 'standard rate · 1 hour · same day',
+      status: 'requested', payment: { ...EMPTY_PAYMENT },
+      requestedAt: ago(4), createdAt: ago(4),
+    },
+    {
+      id: 'j2', clientId: 'b_demo', clientRole: 'business',
+      title: 'दुकान के लिए हफ्ते में 3 दिन सफाई वाला चाहिए',
+      rawRequest: 'दुकान के लिए हफ्ते में 3 दिन सफाई वाला चाहिए',
+      lang: 'hi', category: 'cleaning', serviceId: 'home_cleaning',
+      whenText: 'this week', urgency: 'this_week', estimatedHours: 2,
+      timePref: 'tomorrow', duration: 'hr2', photos: [],
+      geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
+      priceMin: 500, priceMax: 700, priceBasis: 'standard rate · 2 hours · no rush',
+      status: 'requested', payment: { ...EMPTY_PAYMENT },
+      requestedAt: ago(20), createdAt: ago(20),
+    },
+    {
+      id: 'j3', clientId: 's_demo', clientRole: 'society',
+      title: 'Water tank cleaning for 3 towers',
+      rawRequest: 'We need water tank cleaning for 3 towers before the monsoon',
+      lang: 'en', category: 'maintenance', serviceId: 'water_tank_clean',
+      whenText: 'this week', urgency: 'this_week', estimatedHours: 6,
+      timePref: 'scheduled', duration: 'halfday', photos: [],
+      geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
+      priceMin: 2800, priceMax: 3900, priceBasis: 'standard rate · 6 hours · no rush',
+      status: 'requested', scheduledAt: now + 2 * day,
+      payment: { ...EMPTY_PAYMENT },
+      requestedAt: ago(30), createdAt: ago(30),
+    },
+
+    /* ------------------------------------------------------- work in flight */
+    {
+      /* the demo worker is on his way to the demo customer right now —
+         this is the job that shows tracking, chat, SOS and held payment */
+      id: 'j5', clientId: 'c_demo', clientRole: 'customer',
+      title: 'Switchboard sparking in the kitchen',
+      rawRequest: 'The switchboard near the kitchen sparks when I plug in the mixer. Scared to use it.',
+      lang: 'en', category: 'electrical', serviceId: 'switchboard',
+      whenText: 'as soon as possible', urgency: 'emergency', estimatedHours: 1,
+      timePref: 'asap', duration: 'hr1', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 420, priceMax: 600, priceBasis: 'emergency rate · 1 hour · right now',
+      status: 'on_the_way', assignedWorkerId: 'w_demo', agreedAmount: 520,
+      payment: held(520, 'upi', ago(0.4)),
+      requestedAt: ago(1.5), acceptedAt: ago(1.1), travelStartedAt: ago(0.3),
+      requestedWorkerIds: ['w_demo', 'w2'],
+      createdAt: ago(1.5),
+    },
+    {
+      id: 'j13', clientId: 'c2', clientRole: 'customer',
+      title: 'Inverter not charging after power cut',
+      rawRequest: 'Inverter stopped charging after yesterday night power cut',
+      lang: 'en', category: 'electrical', serviceId: 'inverter',
+      whenText: 'today', urgency: 'today', estimatedHours: 2,
+      timePref: 'today', duration: 'hr2', photos: [],
+      geo: { ...AREAS[1], address: 'Flat 7B, Lake View' },
+      priceMin: 700, priceMax: 950, priceBasis: 'standard rate · 2 hours · same day',
+      status: 'working', assignedWorkerId: 'w_demo', agreedAmount: 850,
+      payment: held(850, 'gpay', ago(3)),
+      requestedAt: ago(6), acceptedAt: ago(5.4), travelStartedAt: ago(3.2), startedAt: ago(2.5),
+      createdAt: ago(6),
+    },
+    {
+      id: 'j11', clientId: 'b_demo', clientRole: 'business',
+      title: 'Evening shop cleaning — closing shift',
+      rawRequest: 'Shop cleaning after closing, around 9pm',
+      lang: 'hi', category: 'cleaning', serviceId: 'home_cleaning',
+      whenText: 'tonight', urgency: 'today', estimatedHours: 2,
+      timePref: 'today', duration: 'hr2', photos: [],
+      geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
+      priceMin: 400, priceMax: 550, priceBasis: 'standard rate · 2 hours · same day',
+      status: 'accepted', assignedWorkerId: 'w6', agreedAmount: 480,
+      payment: { method: 'cash', status: 'unpaid', amount: 480, protected: false, updatedAt: ago(5) },
+      requestedAt: ago(7), acceptedAt: ago(5),
+      createdAt: ago(7),
+    },
+    {
+      id: 'j9', clientId: 's_demo', clientRole: 'society',
+      title: 'Four flat doors need hinge and lock repair',
+      rawRequest: 'Four doors in B block need hinge and lock repair',
+      lang: 'en', category: 'carpentry', serviceId: 'door_repair',
+      whenText: 'this week', urgency: 'this_week', estimatedHours: 4,
+      timePref: 'scheduled', duration: 'halfday', photos: [],
+      geo: { ...AREAS[0], address: 'Green Valley, B Block' },
+      priceMin: 1600, priceMax: 2200, priceBasis: 'standard rate · 4 hours · no rush',
+      status: 'accepted', assignedWorkerId: 'w7', agreedAmount: 1900,
+      scheduledAt: now + 1 * day,
+      payment: { method: 'upi', status: 'authorized', amount: 1900, protected: true, updatedAt: ago(9) },
+      requestedAt: ago(26), acceptedAt: ago(9),
+      createdAt: ago(26),
+    },
+    {
+      /* worker says done, customer has not confirmed — the release step */
+      id: 'j14', clientId: 'c2', clientRole: 'customer',
+      title: 'Two tube lights replaced in bedroom',
+      rawRequest: 'Two tube lights not working in bedroom',
+      lang: 'en', category: 'electrical', serviceId: 'lighting',
+      whenText: 'yesterday', urgency: 'flexible', estimatedHours: 1,
+      timePref: 'asap', duration: 'min30', photos: [],
+      geo: { ...AREAS[1], address: 'Flat 7B, Lake View' },
+      priceMin: 260, priceMax: 380, priceBasis: 'standard rate · 30 minutes · no rush',
+      status: 'worker_done', assignedWorkerId: 'w_demo', agreedAmount: 320,
+      payment: held(320, 'phonepe', ago(27)),
+      requestedAt: ago(30), acceptedAt: ago(29), travelStartedAt: ago(28.5), startedAt: ago(28), completedAt: undefined,
+      createdAt: ago(30),
+    },
+
+    /* ------------------------------------------------------ finished, paid */
+    {
+      id: 'j15', clientId: 'c_demo', clientRole: 'customer',
+      title: 'Fan regulator replaced in living room',
+      rawRequest: 'Fan speed regulator not working',
+      lang: 'en', category: 'electrical', serviceId: 'fan_repair',
+      whenText: 'today morning', urgency: 'today', estimatedHours: 1,
+      timePref: 'asap', duration: 'min30', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 300, priceMax: 420, priceBasis: 'standard rate · 30 minutes · same day',
+      status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 380,
+      payment: paid(380, 'upi', ago(5)),
+      requestedAt: ago(8), acceptedAt: ago(7.5), travelStartedAt: ago(7), startedAt: ago(6.5), completedAt: ago(5),
+      createdAt: ago(8),
+    },
+    {
+      id: 'j16', clientId: 'c2', clientRole: 'customer',
+      title: 'New plug point for washing machine',
+      rawRequest: 'Need a new plug point behind washing machine',
+      lang: 'en', category: 'electrical', serviceId: 'wiring',
+      whenText: 'this week', urgency: 'this_week', estimatedHours: 2,
+      timePref: 'scheduled', duration: 'hr2', photos: [],
+      geo: { ...AREAS[1], address: 'Flat 7B, Lake View' },
+      priceMin: 450, priceMax: 620, priceBasis: 'standard rate · 2 hours · no rush',
+      status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 520,
+      payment: paid(520, 'gpay', ago(24 * 4)),
+      requestedAt: ago(24 * 5), acceptedAt: ago(24 * 4.8), completedAt: ago(24 * 4),
+      createdAt: ago(24 * 5),
+    },
+    {
+      id: 'j17', clientId: 's_demo', clientRole: 'society',
+      title: 'Corridor lighting for two floors',
+      rawRequest: 'Corridor lights on 3rd and 4th floor keep failing',
+      lang: 'en', category: 'electrical', serviceId: 'lighting',
+      whenText: 'last week', urgency: 'flexible', estimatedHours: 5,
+      timePref: 'scheduled', duration: 'halfday', photos: [],
+      geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
+      priceMin: 950, priceMax: 1400, priceBasis: 'standard rate · 5 hours · no rush',
+      status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 1150,
+      payment: paid(1150, 'upi', ago(24 * 9)),
+      requestedAt: ago(24 * 11), acceptedAt: ago(24 * 10.6), completedAt: ago(24 * 9),
+      createdAt: ago(24 * 11),
+    },
+    {
+      id: 'j18', clientId: 'c_demo', clientRole: 'customer',
+      title: 'Doorbell rewiring',
+      rawRequest: 'Doorbell stopped working, wiring loose',
+      lang: 'en', category: 'electrical', serviceId: 'wiring',
+      whenText: 'flexible', urgency: 'flexible', estimatedHours: 1,
+      timePref: 'asap', duration: 'hr1', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 520, priceMax: 700, priceBasis: 'standard rate · 1 hour · no rush',
+      status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 640,
+      payment: paid(640, 'cash', ago(24 * 19)),
+      requestedAt: ago(24 * 21), acceptedAt: ago(24 * 20.5), completedAt: ago(24 * 19),
+      createdAt: ago(24 * 21),
+    },
+    {
+      id: 'j6', clientId: 'c_demo', clientRole: 'customer',
+      title: 'Weekly house cleaning and cooking',
+      rawRequest: 'Need someone for weekly house cleaning and cooking',
+      lang: 'en', category: 'domestic', serviceId: 'maid',
+      whenText: 'weekdays', urgency: 'flexible', estimatedHours: 3,
+      timePref: 'scheduled', duration: 'halfday', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 380, priceMax: 520, priceBasis: 'standard rate · 3 hours · no rush',
+      status: 'completed', assignedWorkerId: 'w5', agreedAmount: 450,
+      payment: paid(450, 'upi', ago(24 * 3)),
+      requestedAt: ago(24 * 4), acceptedAt: ago(24 * 3.8), completedAt: ago(24 * 3),
+      createdAt: ago(24 * 4),
+    },
+    {
+      id: 'j7', clientId: 'c_demo', clientRole: 'customer',
+      title: 'AC not cooling — service and gas check',
+      rawRequest: 'AC is running but not cooling at all',
+      lang: 'en', category: 'appliance', serviceId: 'ac_service',
+      whenText: 'last week', urgency: 'today', estimatedHours: 2,
+      timePref: 'asap', duration: 'hr2', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 900, priceMax: 1400, priceBasis: 'standard rate · 2 hours · same day',
+      status: 'completed', assignedWorkerId: 'w11', agreedAmount: 1200,
+      payment: paid(1200, 'card_debit', ago(24 * 12)),
+      requestedAt: ago(24 * 13), acceptedAt: ago(24 * 12.7), completedAt: ago(24 * 12),
+      createdAt: ago(24 * 13),
+    },
+    {
+      id: 'j10', clientId: 's_demo', clientRole: 'society',
+      title: 'Common area deep cleaning before Diwali',
+      rawRequest: 'Common areas and staircases need deep cleaning before Diwali',
+      lang: 'en', category: 'cleaning', serviceId: 'deep_cleaning',
+      whenText: 'last month', urgency: 'flexible', estimatedHours: 8,
+      timePref: 'scheduled', duration: 'fullday', photos: [],
+      geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
+      priceMin: 2000, priceMax: 2900, priceBasis: 'standard rate · 8 hours · no rush',
+      status: 'completed', assignedWorkerId: 'w6', agreedAmount: 2400,
+      payment: paid(2400, 'upi', ago(24 * 16)),
+      requestedAt: ago(24 * 18), acceptedAt: ago(24 * 17.5), completedAt: ago(24 * 16),
+      createdAt: ago(24 * 18),
+    },
+    {
+      id: 'j12', clientId: 'b_demo', clientRole: 'business',
+      title: 'Morning stock run to the wholesale market',
+      rawRequest: 'Driver needed for morning stock pickup from wholesale market',
+      lang: 'hi', category: 'driving', serviceId: 'car_driver',
+      whenText: 'last week', urgency: 'flexible', estimatedHours: 4,
+      timePref: 'scheduled', duration: 'halfday', photos: [],
+      geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
+      priceMin: 700, priceMax: 1000, priceBasis: 'standard rate · 4 hours · no rush',
+      status: 'completed', assignedWorkerId: 'w13', agreedAmount: 900,
+      payment: paid(900, 'cash', ago(24 * 8)),
+      requestedAt: ago(24 * 9), acceptedAt: ago(24 * 8.8), completedAt: ago(24 * 8),
+      createdAt: ago(24 * 9),
+    },
+
+    /* --------------------------------------------- cancelled, fee applied */
+    {
+      id: 'j8', clientId: 'c_demo', clientRole: 'customer',
+      title: 'Bathroom tap dripping',
+      rawRequest: 'Bathroom tap keeps dripping',
+      lang: 'en', category: 'plumbing', serviceId: 'tap_fitting',
+      whenText: 'flexible', urgency: 'flexible', estimatedHours: 1,
+      timePref: 'asap', duration: 'min30', photos: [],
+      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      priceMin: 220, priceMax: 320, priceBasis: 'standard rate · 30 minutes · no rush',
+      status: 'cancelled_by_client', assignedWorkerId: 'w3', agreedAmount: 270,
+      payment: { method: 'upi', status: 'refunded', amount: 270, protected: true, updatedAt: ago(24 * 6) },
+      cancellation: { by: 'client', at: ago(24 * 6), reason: 'Fixed it myself', fee: 0, refunded: true },
+      requestedAt: ago(24 * 6.4), acceptedAt: ago(24 * 6.2),
+      createdAt: ago(24 * 6.4),
+    },
+  ];
+}
+
+/* ------------------------------------------------- conversations in progress */
+
+function msg(
+  id: string, jobId: string, fromRole: Message['fromRole'], fromId: string,
+  kind: MessageKind, text: string, lang: Message['lang'], at: number, durationSec?: number
+): Message {
+  return { id, jobId, fromRole, fromId, kind, text, lang, durationSec, createdAt: at };
+}
+
+function buildMessages(now: number): Message[] {
+  const ago = (h: number) => now - h * hour;
+  return [
+    /* j5 — worker on the way to the demo customer, live thread */
+    msg('m1', 'j5', 'client', 'c_demo', 'text', 'It sparks every time I plug in the mixer. Please be careful.', 'en', ago(1.05)),
+    msg('m2', 'j5', 'worker', 'w_demo', 'quick', 'मैं आ रहा हूँ', 'hi', ago(1.0)),
+    msg('m3', 'j5', 'worker', 'w_demo', 'voice', 'मैं मेन स्विच बंद करके देखूँगा, आप तब तक कुछ मत छुइए', 'hi', ago(0.8), 9),
+    msg('m4', 'j5', 'client', 'c_demo', 'text', 'Understood, I have switched off the mains already.', 'en', ago(0.7)),
+    msg('m5', 'j5', 'worker', 'w_demo', 'quick', '10 मिनट में पहुँचता हूँ', 'hi', ago(0.25)),
+
+    /* j13 — worker on site */
+    msg('m6', 'j13', 'worker', 'w_demo', 'text', 'बैटरी की टर्मिनल ढीली थी, ठीक कर रहा हूँ', 'hi', ago(2.2)),
+    msg('m7', 'j13', 'client', 'c2', 'text', 'Great, thank you. Does the battery need replacing?', 'en', ago(2.0)),
+    msg('m8', 'j13', 'worker', 'w_demo', 'voice', 'अभी नहीं, बैटरी ठीक है, बस कनेक्शन साफ करना था', 'hi', ago(1.8), 7),
+
+    /* j11 — business shift accepted */
+    msg('m9', 'j11', 'client', 'b_demo', 'text', 'दुकान 9 बजे बंद होती है, उसके बाद आ जाइए', 'hi', ago(4.5)),
+    msg('m10', 'j11', 'worker', 'w6', 'quick', 'ठीक है', 'hi', ago(4.3)),
+
+    /* j9 — society scheduling */
+    msg('m11', 'j9', 'client', 's_demo', 'text', 'Please start with B block, the watchman will let you in.', 'en', ago(8.5)),
+    msg('m12', 'j9', 'worker', 'w7', 'text', 'ശരി, ഞാൻ രാവിലെ 9 മണിക്ക് എത്തും', 'ml', ago(8.2)),
+
+    /* j14 — waiting for the customer to confirm */
+    msg('m13', 'j14', 'worker', 'w_demo', 'quick', 'काम पूरा हो गया', 'hi', ago(27.5)),
+  ];
+}
+
+/* ------------------------------------------------------------------ quotes */
+
+function buildQuotes(now: number): Quote[] {
+  const ago = (h: number) => now - h * hour;
+  return [
+    { id: 'q1', jobId: 'j1', workerId: 'w2', amount: 300, note: 'Regulator and capacitor included', createdAt: ago(3.2) },
+    { id: 'q2', jobId: 'j1', workerId: 'w_demo', amount: 280, note: 'Can come by 6pm today', createdAt: ago(2.6) },
+    { id: 'q3', jobId: 'j3', workerId: 'w15', amount: 3400, note: 'Three towers, two days, chemical wash included', createdAt: ago(22) },
+    { id: 'q4', jobId: 'j2', workerId: 'w6', amount: 560, note: 'हफ्ते में तीन दिन, शाम को', createdAt: ago(14) },
+  ];
+}
+
+/* --------------------------------------------------------------- SOS history */
+
+function buildSos(now: number): SosEvent[] {
+  return [
+    /* raised once, resolved — proves the button is wired to something real */
+    { id: 'sos1', jobId: 'j17', at: now - 24 * 9 * hour, by: 'worker', lat: AREAS[0].lat, lng: AREAS[0].lng, resolved: true },
+  ];
+}
 
 export const DEMO_ACCOUNTS = [
   { role: 'worker'   as const, phone: '9000000001', id: 'w_demo', labelKey: 'a.demoWorker'   as const },
@@ -215,10 +510,23 @@ export const DEMO_ACCOUNTS = [
   { role: 'business' as const, phone: '9000000004', id: 'b_demo', labelKey: 'a.demoBusiness' as const },
 ];
 
+/**
+ * A fresh database.
+ *
+ * Everything is deep-copied so that `reset()` really does reset — the previous
+ * build handed out the same array objects on every call, which meant a demo
+ * that had been played with once never came back clean.
+ */
 export function seedDB(): DB {
+  const now = Date.now();
   return {
-    workers, clients, jobs, reviews,
-    quotes: [], messages: [], sos: [],
+    workers: workers.map((x) => ({ ...x, verification: { ...x.verification }, services: [...x.services], languages: [...x.languages] })),
+    clients: clients.map((x) => ({ ...x })),
+    jobs: buildJobs(now),
+    quotes: buildQuotes(now),
+    messages: buildMessages(now),
+    reviews: reviews.map((x) => ({ ...x, tags: [...x.tags] })),
+    sos: buildSos(now),
     session: { role: null, id: null, lang: 'en' },
   };
 }

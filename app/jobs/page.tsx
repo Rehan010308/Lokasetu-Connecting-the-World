@@ -8,6 +8,7 @@ import { useMe, useStore, useT } from '@/components/store';
 import { Dock, GlassCard, Stagger, StaggerItem } from '@/components/aurora';
 import { Empty, HeaderTools, Money, Shell, TopBar } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
+import { ClientPanel, WorkerPanel } from '@/components/panels';
 
 export default function JobsPage() {
   const router = useRouter();
@@ -28,10 +29,30 @@ export default function JobsPage() {
   const past = list.filter((j) => DEAD.includes(j.status));
 
   return (
-    <Shell>
+    <Shell aside={isWorker && me.worker ? <WorkerPanel worker={me.worker} /> : <ClientPanel />}>
       <TopBar glassy title={t('n.jobs')} right={<HeaderTools />} />
       <main className="page v-4" style={{ paddingTop: 4 }}>
-        {list.length === 0 ? <Empty icon="📋" text={t('h.noJobs')} /> : null}
+        {list.length === 0 ? (
+          isWorker ? (
+            <Empty
+              icon="🧰"
+              title={t('x.noFeedTitle')}
+              text={t('x.noFeedBody')}
+              action={{ href: '/', label: `🔎 ${t('n.home')}` }}
+            />
+          ) : (
+            <Empty
+              icon="📋"
+              title={t('x.noReqTitle')}
+              text={t('x.noReqBody')}
+              action={{ href: '/book', label: `➕ ${t('b.request')}` }}
+              tips={[
+                { icon: '🔎', text: t('x.browseAll'), href: '/search' },
+                { icon: '🛡️', text: t('ts.title'), href: '/trust' },
+              ]}
+            />
+          )
+        ) : null}
 
         {live.length ? (
           <Stagger className="v-3" gap={0.05}>

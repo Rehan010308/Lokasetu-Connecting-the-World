@@ -361,6 +361,30 @@ export function TierUp({ tier, show }: { tier: { id: string; label: string; icon
 
 export interface DockItem { href: string; icon: string; label: string }
 
+/* ------------------------------------------------------------- breakpoints */
+
+/**
+ * True once the viewport is wide enough for the three-panel deck.
+ *
+ * Starts false on every render pass so the server HTML and the first client
+ * render agree (no hydration mismatch), then corrects itself on mount. The
+ * phone is the default; the desktop is the enhancement, never the reverse.
+ */
+export function useMedia(query: string): boolean {
+  const [on, setOn] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia(query);
+    const sync = () => setOn(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, [query]);
+  return on;
+}
+
+export const useDesktop = () => useMedia('(min-width: 1024px)');
+export const useTablet  = () => useMedia('(min-width: 768px)');
+
 export function Dock({ items }: { items: DockItem[] }) {
   const path = usePathname();
   const active = items.reduce(
@@ -370,6 +394,14 @@ export function Dock({ items }: { items: DockItem[] }) {
 
   return (
     <nav className="dock no-print" aria-label="Main">
+      {/* Rail header. CSS hides it below 1024px, where the dock is a pill. */}
+      <div className="dock-brand">
+        <span className="mark" aria-hidden>क</span>
+        <span>
+          <span className="nm">KaamSetu</span><br />
+          <span className="sb">काम का पुल</span>
+        </span>
+      </div>
       {items.map((it) => {
         const on = it.href === active;
         return (
@@ -413,10 +445,20 @@ export function PageFade({ children }: { children: React.ReactNode }) {
 
 /* -------------------------------------------------------------- bottom sheet */
 
+/**
+ * Bottom sheet on a phone, centred modal on a laptop.
+ *
+ * A sheet that slides up from the bottom edge of a 27-inch monitor is a phone
+ * pattern wearing a desktop costume — it puts the content 700px away from
+ * where the eye already is. Above 1024px the same component becomes a dialog
+ * in the optical centre, scaling in instead of sliding, with dragging off
+ * (there is nothing to thumb-flick with a mouse).
+ */
 export function Sheet({
   open, onClose, children, title,
 }: { open: boolean; onClose: () => void; children: React.ReactNode; title?: string }) {
   const reduce = useReducedMotion();
+  const desktop = useDesktop();
 
   React.useEffect(() => {
     if (!open) return;
@@ -441,15 +483,27 @@ export function Sheet({
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            initial={reduce ? false : { y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
+            initial={reduce ? false : desktop ? { opacity: 0, scale: 0.96, y: 8 } : { y: '100%' }}
+            animate={desktop ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }}
+            exit={desktop ? { opacity: 0, scale: 0.97 } : { y: '100%' }}
             transition={SPRING.soft}
-            drag={reduce ? false : 'y'}
+            drag={reduce || desktop ? false : 'y'}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.5 }}
             onDragEnd={(_, info) => { if (info.offset.y > 110) onClose(); }}
-            style={{
+            style={desktop ? {
+              position: 'fixed', top: '50%', left: '50%', zIndex: 71,
+              translateX: '-50%', translateY: '-50%',
+              width: 'min(560px, calc(100vw - 64px))',
+              background: 'var(--glass-2)',
+              backdropFilter: 'blur(40px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+              borderRadius: 30,
+              border: '1px solid var(--glass-border)',
+              boxShadow: 'var(--lift-3)',
+              padding: '26px 26px 28px',
+              maxHeight: '82dvh', overflowY: 'auto',
+            } : {
               position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 71,
               maxWidth: 520, margin: '0 auto',
               background: 'var(--glass-2)',
@@ -462,7 +516,12 @@ export function Sheet({
               maxHeight: '86dvh', overflowY: 'auto',
             }}
           >
-            <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--hairline)', margin: '0 auto 14px' }} />
+            {desktop ? (
+              <button className="icon-btn" onClick={onClose} aria-label="Close"
+                style={{ position: 'absolute', top: 18, right: 18 }}>✕</button>
+            ) : (
+              <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--hairline)', margin: '0 auto 14px' }} />
+            )}
             {title ? <h2 className="t-h2" style={{ marginBottom: 14 }}>{title}</h2> : null}
             {children}
           </motion.div>

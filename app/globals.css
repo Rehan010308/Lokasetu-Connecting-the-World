@@ -993,6 +993,41 @@ input, textarea, select { font: inherit; }
 .empty { text-align: center; padding: 56px 24px; color: var(--ink-3); }
 .empty .big { font-size: 46px; display: block; margin-bottom: 12px; opacity: .8; }
 
+/* Smart empty state: a signpost, not a shrug. */
+.empty.smart { padding: 44px 4px 20px; }
+.empty.smart .t-h2 { color: var(--ink); }
+.empty.smart .btn { display: inline-flex; margin-left: auto; margin-right: auto; }
+
+.tips {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 26px;
+  text-align: left;
+}
+.tip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 11px 15px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  box-shadow: var(--lift-1);
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: transform var(--t-base) var(--e-out), box-shadow var(--t-base) var(--e-out);
+}
+@media (hover: hover) { a.tip:hover { transform: translateY(-2px); box-shadow: var(--lift-2); } }
+.tip .ic { font-size: 20px; flex: none; }
+.tip .tx { flex: 1; }
+.tip .go { color: var(--em-600); font-size: 19px; font-weight: 800; flex: none; }
+
 .note {
   border-radius: var(--r-md);
   padding: 13px 15px;
@@ -1233,3 +1268,208 @@ label.lbl { display: block; font-size: 13.5px; font-weight: 700; color: var(--in
 .banner.warn { background: rgba(245,166,35,.12); border-color: rgba(245,166,35,.24); color: var(--gd-600); }
 [data-theme='dark'] .banner { color: var(--in-300); }
 [data-theme='dark'] .banner.warn { color: var(--gd-300); }
+
+/* ===========================================================================
+   18. RESPONSIVE — PHONE, TABLET, LAPTOP, DESKTOP
+   ---------------------------------------------------------------------------
+   Everything above this line describes the phone. It is the base layer and it
+   is deliberately untouched: the people this product is built for arrive on a
+   ₹6,000 Android, and that experience must not regress to make a laptop look
+   good.
+
+   From here down the layout is rebuilt, not stretched:
+
+     < 768px    phone      single column, floating dock          (base layer)
+     768–1023   tablet     wider column, roomier gutters, dock stays afloat
+     1024–1439  laptop     THREE PANELS — nav rail | content | context panel
+     1440+      desktop    same three panels, more generous everywhere
+
+   The three-panel shell is a CSS grid on `.shell`. Both side tracks are `auto`,
+   so a screen that renders no rail and no context panel (login, the booking
+   flow) collapses to a single centred column instead of leaving a dead gutter.
+   Placement is explicit, so the dock keeps working as the last DOM child while
+   painting as the first visual column.
+   =========================================================================== */
+
+/* ------------------------------------------------------------- 18a. TABLET */
+
+@media (min-width: 768px) {
+  :root {
+    --shell: 700px;
+    --gutter: 28px;
+  }
+
+  .page { padding-bottom: 140px; }
+
+  /* room for a real headline now */
+  .t-display { font-size: 40px; }
+
+  /* every destination is labelled — no more guessing at icons */
+  .dock { gap: 6px; padding: 8px; }
+  .dock-item { padding: 0 19px; }
+  .dock-item .lbl { max-width: 160px; opacity: 1; }
+
+  /* two-up where a phone had to stack */
+  .lg-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+
+  /* The sticky header's frosted band is as wide as the column on a phone,
+     because the column IS the screen. On a tablet the column is centred, so
+     the same band became a floating rectangle with two hard edges. Paint it
+     full-bleed behind the header instead. */
+  .topbar.glassy {
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: none;
+  }
+  .topbar.glassy::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 100vw;
+    transform: translateX(-50%);
+    background: var(--glass);
+    backdrop-filter: blur(var(--blur-lg)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(180%);
+    border-bottom: 1px solid var(--hairline-2);
+    z-index: -1;
+  }
+
+  .empty { padding: 68px 32px; }
+}
+
+/* --------------------------------------------- 18b. LAPTOP — THREE PANELS */
+
+@media (min-width: 1024px) {
+  :root {
+    --gutter: 32px;
+    --rail: 236px;    /* left navigation                */
+    --col:  640px;    /* the reading column             */
+    --aside: 328px;   /* right context panel            */
+    --deck-gap: 32px;
+  }
+
+  .shell,
+  .shell.wide {
+    max-width: none;
+    display: grid;
+    grid-template-columns: auto minmax(0, var(--col)) auto;
+    grid-template-rows: auto 1fr;
+    justify-content: center;
+    column-gap: var(--deck-gap);
+    align-items: start;
+    padding: 0 32px;
+  }
+
+  .shell > .topbar { grid-column: 2; grid-row: 1; }
+  .shell > .page,
+  .shell > main.page,
+  .shell > div.page  { grid-column: 2; grid-row: 2; }
+  .shell > .dock     { grid-column: 1; grid-row: 1 / -1; }
+  .shell > .rail-r   { grid-column: 3; grid-row: 1 / -1; }
+
+  .page { padding: 0 0 72px; }
+
+  /* the brand lives in the rail up here, so the topbar loses its tile */
+  .topbar { position: static; padding: 26px 0 14px; background: none; }
+  .topbar > .mark { display: none; }
+  .topbar.glassy { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: none; }
+  .topbar.glassy::after { display: none; }
+
+  /* ---- the floating dock becomes a standing navigation rail ---- */
+  .dock {
+    position: sticky;
+    top: 26px;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: var(--rail);
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 16px 12px;
+    border-radius: var(--r-lg);
+    align-self: start;
+    margin: 26px 0 32px;
+  }
+  .dock-item {
+    height: 48px;
+    padding: 0 15px;
+    border-radius: var(--r-md);
+    font-size: 14.5px;
+    justify-content: flex-start;
+  }
+  .dock-item .lbl { max-width: 200px; opacity: 1; }
+  .dock-pill { border-radius: var(--r-md); }
+
+  .dock-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 4px 8px 16px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--hairline-2);
+  }
+  .dock-brand .nm { font-size: 17px; font-weight: 800; letter-spacing: -.03em; color: var(--ink); }
+  .dock-brand .sb { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+
+  /* ---- right-hand context panel ---- */
+  .rail-r {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: var(--aside);
+    position: sticky;
+    top: 26px;
+    align-self: start;
+    padding: 26px 0 40px;
+  }
+  .rail-r .t-h3 { font-size: 15.5px; }
+
+  /* ---- surfaces get a little more air on a big screen ---- */
+  .glass, .card { border-radius: var(--r-xl); }
+  .pad   { padding: 22px; }
+  .empty { padding: 76px 36px; }
+  .empty .big { font-size: 54px; }
+
+  .grid-3 { gap: 14px; }
+  .grid-2 { gap: 16px; }
+
+  /* modal, not bottom sheet */
+  .modal-surface {
+    border-radius: var(--r-xl) !important;
+    max-width: 560px;
+  }
+
+  .scroll-x { margin: 0; padding-left: 0; padding-right: 0; }
+}
+
+/* ------------------------------------------------ 18c. LARGE DESKTOP 1440+ */
+
+@media (min-width: 1440px) {
+  :root {
+    --rail: 264px;
+    --col:  720px;
+    --aside: 372px;
+    --deck-gap: 40px;
+  }
+
+  .t-display { font-size: 46px; }
+  .dock { padding: 18px 14px; }
+  .dock-item { height: 52px; font-size: 15px; }
+  .rail-r .t-h3 { font-size: 16px; }
+}
+
+/* -------------------------------------------- 18d. THE PHONE, UNCHANGED */
+
+/* Anything that only exists on a big screen must not leak onto a small one. */
+@media (max-width: 1023px) {
+  .rail-r, .dock-brand { display: none !important; }
+}
+
+/* A landscape phone is short, not wide: keep the dock off the content. */
+@media (max-height: 520px) and (max-width: 1023px) {
+  .page { padding-bottom: 108px; }
+  .orb-wrap { padding: 10px 0; }
+}

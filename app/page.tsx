@@ -13,6 +13,7 @@ import { useSpeech } from '@/components/kit';
 import { Dock, GlassCard, Magnetic, Reveal, Stagger, StaggerItem, VoiceOrb } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
+import { ClientPanel, WorkerPanel } from '@/components/panels';
 
 /** Statuses that mean the job is over, one way or another. */
 const DEAD_STATUSES: string[] = ['completed', 'cancelled_by_client', 'cancelled_by_worker', 'expired'];
@@ -67,7 +68,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
   const orgLine = me.client?.orgName ? `${me.client.orgName} · ` : '';
 
   return (
-    <Shell>
+    <Shell aside={<ClientPanel />}>
       <TopBar title={me.name} subtitle={`${orgLine}📍 ${me.geo.areaName.split(',')[0]}`} right={<HeaderTools />} />
       <main className="page v-6" style={{ paddingTop: 4 }}>
 
@@ -202,7 +203,7 @@ function WorkerHome() {
   const active = db.jobs.filter((j) => j.assignedWorkerId === w.id && !DEAD_STATUSES.includes(j.status));
 
   return (
-    <Shell>
+    <Shell aside={<WorkerPanel worker={w} />}>
       <TopBar title={w.name} subtitle={`📍 ${w.geo.areaName.split(',')[0]} · ${w.radiusKm} ${t('c.km')}`} right={<HeaderTools />} />
       <main className="page v-4" style={{ paddingTop: 4 }}>
 
@@ -248,7 +249,14 @@ function WorkerHome() {
           <span className="tag">{feed.length}</span>
         </div>
 
-        {feed.length === 0 ? <Empty text={t('h.noJobs')} icon="🧰" /> : (
+        {feed.length === 0 ? (
+          <Empty
+            icon="🧰"
+            title={t('x.noFeedTitle')}
+            text={t('x.noFeedBody')}
+            tips={workerTips(w, t)}
+          />
+        ) : (
           <Stagger className="v-3" gap={0.06}>
             {feed.map(({ job, km }) => (
               <StaggerItem key={job.id}>
@@ -279,4 +287,21 @@ function WorkerHome() {
       <Dock items={navWorker(t)} />
     </Shell>
   );
+}
+
+/* ---------------------------------------------------------------- helpers */
+
+/**
+ * What this particular worker should do next, most valuable first.
+ * An empty feed is not the worker's fault, but these three things genuinely
+ * change how much work reaches them — so the empty screen says so instead of
+ * shrugging.
+ */
+function workerTips(w: NonNullable<ReturnType<typeof useMe>['worker']>, t: (k: any) => string) {
+  const tips: { icon: string; text: string; href: string }[] = [];
+  if (w.verification.status !== 'verified') tips.push({ icon: '🪪', text: t('x.tipVerify'), href: '/verify' });
+  if (w.services.length < 3) tips.push({ icon: '🧰', text: t('x.tipSkills'), href: '/me' });
+  if (w.radiusKm < 8) tips.push({ icon: '📍', text: t('x.tipRadius'), href: '/me' });
+  tips.push({ icon: '🛡️', text: t('ts.title'), href: '/trust' });
+  return tips;
 }
