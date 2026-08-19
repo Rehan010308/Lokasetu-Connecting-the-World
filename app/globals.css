@@ -588,6 +588,22 @@ input, textarea, select { font: inherit; }
 .textarea { min-height: 132px; resize: vertical; line-height: 1.55; }
 .input.otp { text-align: center; letter-spacing: .42em; font-size: 26px; font-weight: 780; padding-left: .42em; }
 
+/* A native <select> ignores most of the above without this: no default chrome,
+   our own chevron, and enough right padding that a long option never runs
+   under it. */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 42px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+                    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 21px) calc(50% + 2px), calc(100% - 15px) calc(50% + 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+select.input option { background: var(--canvas-2); color: var(--ink); }
+
 .label { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink-2); margin: 0 0 8px 2px; }
 
 /* big tappable choice row */
@@ -1066,6 +1082,79 @@ input, textarea, select { font: inherit; }
 .scroll-x::-webkit-scrollbar { display: none; }
 .scroll-x > * { scroll-snap-align: start; flex: none; }
 
+/* ------------------------------------------------------------------ 15b. MAP */
+
+.map {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--lift-2);
+  /* the backdrop is the fallback: if every tile fails to load, this is what
+     the route is drawn on, and it still reads as a map rather than a hole */
+  background:
+    radial-gradient(120% 90% at 30% 20%, rgba(20,200,224,.18), transparent 60%),
+    repeating-linear-gradient(90deg, var(--hairline-2) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(0deg, var(--hairline-2) 0 1px, transparent 1px 44px),
+    var(--canvas-2);
+}
+.map-tile { position: absolute; width: 256px; height: 256px; background-size: 256px 256px; background-repeat: no-repeat; }
+[data-theme='dark'] .map-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(1.05); }
+.map-ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.map-ping { transform-origin: center; animation: map-ping 2s var(--e-out) infinite; }
+@keyframes map-ping {
+  from { r: 10; opacity: .9; }
+  to   { r: 26; opacity: 0; }
+}
+
+.map-credit {
+  position: absolute;
+  right: 6px; bottom: 5px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.72);
+  color: #2A3547;
+}
+[data-theme='dark'] .map-credit { background: rgba(6,10,17,.6); color: #A9B8CC; }
+
+.map-eta {
+  position: absolute;
+  left: 10px; top: 10px;
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 13px;
+  border-radius: var(--r-pill);
+  font-size: 13.5px;
+  background: var(--glass-2);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--lift-2);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  color: var(--ink);
+}
+.map-eta .sep { opacity: .4; }
+
+/* -------------------------------------------------------- 15c. PULL TO REFRESH */
+
+.ptr {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 13px;
+  transition: height var(--t-base) var(--e-out);
+}
+.ptr .spin {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--hairline);
+  border-top-color: var(--em-500);
+}
+.ptr.busy .spin { animation: ptr-spin .7s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+
 /* ------------------------------------------------- 16. ACCESSIBILITY OVERRIDES */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1364,7 +1453,8 @@ label.lbl { display: block; font-size: 13.5px; font-weight: 700; color: var(--in
   .shell > .topbar { grid-column: 2; grid-row: 1; }
   .shell > .page,
   .shell > main.page,
-  .shell > div.page  { grid-column: 2; grid-row: 2; }
+  .shell > div.page,
+  .shell > .ptr-host { grid-column: 2; grid-row: 2; min-width: 0; }
   .shell > .dock     { grid-column: 1; grid-row: 1 / -1; }
   .shell > .rail-r   { grid-column: 3; grid-row: 1 / -1; }
 

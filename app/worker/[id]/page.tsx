@@ -12,6 +12,7 @@ import { useMe, useStore, useT } from '@/components/store';
 import { CardSkeleton, Dock, GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
 import { HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal } from '@/components/nav';
+import { WorkerProfilePanel } from '@/components/panels';
 
 export default function WorkerProfilePage() {
   return (
@@ -52,7 +53,7 @@ function Profile() {
   const hireMessage = `${t('app.name')}: ${t('w.hire')} — ${svc ? serviceName(svc, lang) : categoryName(w.category, lang)}`;
 
   return (
-    <Shell>
+    <Shell aside={<WorkerProfilePanel worker={w} km={km} />}>
       <TopBar glassy back title={w.name} subtitle={categoryName(w.category, lang)} right={<HeaderTools />} />
       <main className="page v-4" style={{ paddingTop: 4 }}>
 

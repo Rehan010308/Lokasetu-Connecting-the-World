@@ -5,7 +5,9 @@
    =========================================================================== */
 
 import type { CategoryId } from './catalog';
+import type { ShiftPattern } from './shifts';
 export type { CategoryId } from './catalog';
+export type { ShiftPattern } from './shifts';
 
 export type LangCode =
   | 'en' | 'hi' | 'ta' | 'te' | 'kn' | 'ml' | 'mr' | 'bn' | 'gu' | 'pa';
@@ -189,6 +191,14 @@ export interface Job {
   duration?: DurationEstimate;
   /** workers the request was sent to */
   requestedWorkerIds?: string[];
+
+  /**
+   * Set when this is a recurring rota rather than a one-off visit — a shop
+   * cleaner every Mon/Wed/Fri, a society guard on nights. See lib/shifts.ts.
+   */
+  shift?: ShiftPattern;
+  /** how many people are needed per shift */
+  staffCount?: number;
 
   /* ---- lifecycle timestamps, used by the cancellation policy ---- */
   requestedAt?: number;

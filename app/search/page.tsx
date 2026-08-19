@@ -12,6 +12,7 @@ import { useMe, useStore, useT } from '@/components/store';
 import { CardSkeleton, Dock, GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal } from '@/components/nav';
+import { SearchPanel } from '@/components/panels';
 
 export default function SearchPage() {
   return (
@@ -115,7 +116,16 @@ function SearchInner() {
   ] as const;
 
   return (
-    <Shell>
+    <Shell aside={
+      <SearchPanel
+        count={shown.length}
+        areaName={me.geo.areaName.split(',')[0]}
+        price={price}
+        filters={FILTERS}
+        filter={filter}
+        onFilter={(id) => setFilter(id as any)}
+      />
+    }>
       <TopBar
         glassy
         title={serviceName(svc, lang)}

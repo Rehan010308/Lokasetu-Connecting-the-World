@@ -11,6 +11,11 @@ import { useActions, useMe, useStore, useT } from '@/components/store';
 import { Dock, GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
 import { Empty, HeaderTools, Money, Shell, TopBar } from '@/components/kit';
 import { navNormal } from '@/components/nav';
+import { HirePanel } from '@/components/panels';
+import {
+  DAY_KEYS, DEFAULT_SHIFT, SLOTS, crossesMidnight, formatTime, hoursPerWeek,
+  isValidShift, monthlyCost, shiftSummary, type ShiftPattern,
+} from '@/lib/shifts';
 
 /**
  * Bulk hiring for societies and businesses.
@@ -42,6 +47,8 @@ export default function HirePage() {
   const [count, setCount] = React.useState(1);
   const [duration, setDuration] = React.useState<Duration>('monthly');
   const [price, setPrice] = React.useState<{ min: number; max: number } | null>(null);
+  /* A rota, not an event. Only meaningful once the booking repeats. */
+  const [shift, setShift] = React.useState<ShiftPattern>({ ...DEFAULT_SHIFT, weeks: 4 });
 
   React.useEffect(() => {
     if (ready && me.role !== 'society' && me.role !== 'business') router.replace('/');
@@ -51,12 +58,24 @@ export default function HirePage() {
     let dead = false;
     (async () => {
       if (!svc) { setPrice(null); return; }
-      const hours = duration === 'oneTime' ? 4 : 8;
+      /* For a rota the honest unit is a month of the actual roster, not a
+         made-up eight-hour day: one hour of price, multiplied by the hours
+         the pattern really contains. */
+      const recurring = duration !== 'oneTime';
+      const hours = recurring ? 1 : 4;
       const p = await suggestPrice(svc, 'this_week', hours);
-      if (!dead) setPrice({ min: p.min * count, max: p.max * count });
+      if (dead) return;
+      if (recurring) {
+        setPrice({
+          min: monthlyCost(shift, p.min, count),
+          max: monthlyCost(shift, p.max, count),
+        });
+      } else {
+        setPrice({ min: p.min * count, max: p.max * count });
+      }
     })();
     return () => { dead = true; };
-  }, [svc, count, duration]);
+  }, [svc, count, duration, shift]);
 
   if (!ready || (me.role !== 'society' && me.role !== 'business')) {
     return <Shell><main className="page" style={{ paddingTop: 100 }}><Empty icon="⏳" text={t('c.loading')} /></main></Shell>;
@@ -69,10 +88,13 @@ export default function HirePage() {
   function publish() {
     if (!svc || !cat || !me.id) return;
     const label = serviceName(svc, lang);
+    const recurring = duration !== 'oneTime';
     const id = requestBooking({
       clientId: me.id,
       clientRole: me.role as 'society' | 'business',
-      title: `${label} × ${count} — ${t(`g.${duration}`)}`,
+      title: recurring
+        ? `${label} × ${count} — ${shiftSummary(shift, t)}`
+        : `${label} × ${count} — ${t(`g.${duration}`)}`,
       rawRequest: `${me.client?.orgName ?? ''}: ${label}, ${count} ${t('g.staffCount')}, ${t(`g.${duration}`)}`,
       lang,
       category: cat,
@@ -83,13 +105,28 @@ export default function HirePage() {
       geo: me.geo,
       priceMin: price?.min ?? 0,
       priceMax: price?.max ?? 0,
-      priceBasis: `${count} × ${label} · ${t(`g.${duration}`)}`,
+      priceBasis: recurring
+        ? `${count} × ${label} · ${hoursPerWeek(shift)} ${t('sh.hoursWeek')}`
+        : `${count} × ${label} · ${t(`g.${duration}`)}`,
+      shift: recurring ? shift : undefined,
+      staffCount: count,
     }, rankWorkers({ geo: me.geo, category: cat, serviceId: svc }, db.workers).map((m) => m.worker.id));
     router.push(`/job/${id}`);
   }
 
+  const hourlyGuide = price && duration !== 'oneTime' && hoursPerWeek(shift) > 0
+    ? Math.round(price.max / (hoursPerWeek(shift) * 4.345 * count))
+    : 0;
+
   return (
-    <Shell>
+    <Shell aside={
+      <HirePanel
+        shift={duration === 'oneTime' ? null : shift}
+        staff={count}
+        hourly={hourlyGuide}
+        workersNearby={available}
+      />
+    }>
       <TopBar
         glassy back="/"
         title={t(isSociety ? 'g.socTitle' : 'g.bizTitle')}
@@ -160,6 +197,79 @@ export default function HirePage() {
                 </div>
               </div>
 
+              {/* ---- the rota itself: which days, which hours, for how long ---- */}
+              {duration !== 'oneTime' ? (
+                <div className="v-3">
+                  <div className="between">
+                    <p className="label" style={{ margin: 0 }}>🔁 {t('sh.title')}</p>
+                    <span className="tag in">{t('sh.recurring')}</span>
+                  </div>
+
+                  <div>
+                    <p className="t-xs" style={{ marginBottom: 7 }}>{t('sh.days')}</p>
+                    <div className="h-2 wrap" style={{ gap: 7 }}>
+                      {DAY_KEYS.map((key, day) => {
+                        const on = shift.days.includes(day);
+                        return (
+                          <button
+                            key={key}
+                            className={`chip${on ? ' on' : ''}`}
+                            aria-pressed={on}
+                            style={{ minWidth: 54, justifyContent: 'center' }}
+                            onClick={() => setShift((p) => ({
+                              ...p,
+                              days: on ? p.days.filter((d) => d !== day) : [...p.days, day].sort(),
+                            }))}
+                          >
+                            {t(key)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {!shift.days.length ? <p className="t-xs" style={{ marginTop: 6, color: 'var(--danger)' }}>{t('sh.pickDay')}</p> : null}
+                  </div>
+
+                  <div className="grid-2">
+                    <div>
+                      <label className="t-xs" htmlFor="sh-from" style={{ display: 'block', marginBottom: 6 }}>{t('sh.from')}</label>
+                      <select id="sh-from" className="input" value={shift.startMin}
+                        onChange={(e) => setShift((p) => ({ ...p, startMin: Number(e.target.value) }))}>
+                        {SLOTS.map((m) => <option key={m} value={m}>{formatTime(m)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="t-xs" htmlFor="sh-to" style={{ display: 'block', marginBottom: 6 }}>{t('sh.to')}</label>
+                      <select id="sh-to" className="input" value={shift.endMin}
+                        onChange={(e) => setShift((p) => ({ ...p, endMin: Number(e.target.value) }))}>
+                        {SLOTS.map((m) => <option key={m} value={m}>{formatTime(m)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {crossesMidnight(shift) ? <p className="note gd">🌙 {t('sh.overnight')}</p> : null}
+
+                  <div>
+                    <p className="t-xs" style={{ marginBottom: 7 }}>{t('sh.howLong')}</p>
+                    <div className="grid-3">
+                      {([['sh.oneMonth', 4], ['sh.threeMonths', 13], ['sh.ongoing', undefined]] as const).map(([key, weeks]) => (
+                        <button key={key} className={`chip${shift.weeks === weeks ? ' on' : ''}`}
+                          style={{ minHeight: 48, justifyContent: 'center', fontSize: 13 }}
+                          onClick={() => setShift((p) => ({ ...p, weeks }))}>
+                          {t(key)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isValidShift(shift) ? (
+                    <div className="note em">
+                      📅 {shiftSummary(shift, t)}<br />
+                      ⏱ {t('sh.hoursWeek')}: {hoursPerWeek(shift) * count}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               {price ? (
                 <div>
                   <p className="t-xs">{t('p.estimate')}</p>
@@ -172,7 +282,10 @@ export default function HirePage() {
 
               <p className="note em">👷 {available} · {me.geo.areaName.split(',')[0]}</p>
 
-              <button className="btn" onClick={publish}>{t('p.publish')}</button>
+              <button className="btn" onClick={publish}
+                disabled={duration !== 'oneTime' && !isValidShift(shift)}>
+                {t('p.publish')}
+              </button>
             </GlassCard>
           </Reveal>
         ) : null}

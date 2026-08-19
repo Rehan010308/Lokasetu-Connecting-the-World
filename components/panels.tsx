@@ -3,8 +3,14 @@
 import React from 'react';
 import Link from 'next/link';
 import type { Job, Worker } from '@/lib/types';
+import { etaMinutes } from '@/lib/ai/match';
+import { formatKm } from '@/lib/geo';
+import { amountFor, statusKey } from '@/lib/payments';
+import { telLink, waLink, navigateLink } from '@/lib/links';
+import { hoursPerWeek, monthlyCost, shiftSummary } from '@/lib/shifts';
+import type { ShiftPattern } from '@/lib/shifts';
 import { useMe, useStore, useT } from './store';
-import { Money, Panel, Stars } from './kit';
+import { Initials, Money, Panel, Stars, VerifiedBadge } from './kit';
 
 /* ===========================================================================
    DESKTOP CONTEXT PANELS
@@ -143,5 +149,157 @@ export function HelpPanel() {
       <p className="t-xs">{t('d.helpSub')}</p>
       <Link href="/trust" className="btn sm ghost">🛡️ {t('d.openTrust')}</Link>
     </Panel>
+  );
+}
+
+/* ------------------------------------------------------------- job detail */
+
+/**
+ * Context for one job: money, distance, and the two buttons a person reaches
+ * for when something is going wrong. On a phone all of this already exists in
+ * the main column — this panel saves a scroll on a laptop, it does not hold
+ * anything exclusively.
+ */
+export function JobPanel({ job, worker, km }: { job: Job; worker: Worker | null; km: number }) {
+  const { t } = useT();
+  const live = job.status === 'on_the_way' || job.status === 'working';
+
+  return (
+    <>
+      <Panel title={t('d.thisJob')} icon="📋">
+        <StatRow label={t('y.agreed')} value={<Money amount={amountFor(job)} />} />
+        <StatRow label={t('c.done')} value={t(statusKey(job.payment.status) as any)} />
+        {worker ? <StatRow label={t('w.away')} value={formatKm(km)} hint={`~${etaMinutes(km)} ${t('c.min')}`} /> : null}
+        {job.payment.protected ? <p className="note em" style={{ marginTop: 4 }}>🔒 {t('ts.protected')}</p> : null}
+      </Panel>
+
+      {job.shift ? (
+        <Panel title={t('sh.shiftPlan')} icon="🔁">
+          <p className="t-xs">{shiftSummary(job.shift, t)}</p>
+          <StatRow label={t('sh.hoursWeek')} value={hoursPerWeek(job.shift)} />
+        </Panel>
+      ) : null}
+
+      {worker ? (
+        <Panel title={t('d.workerAt')} icon="👷">
+          <div className="h-2" style={{ gap: 10 }}>
+            <Initials name={worker.name} size="s" />
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="t-sm strong">{worker.name}</div>
+              {worker.reviewCount ? <Stars value={worker.rating} count={worker.reviewCount} /> : null}
+            </div>
+          </div>
+          <VerifiedBadge v={worker.verification} small />
+          <div className="v-2">
+            <a className="btn sm ghost" href={telLink(worker.phone)}>📞 {t('w.callNow')}</a>
+            <a className="btn sm ghost" href={waLink(worker.phone, job.title)} target="_blank" rel="noopener noreferrer">💬 {t('w.whatsapp')}</a>
+          </div>
+        </Panel>
+      ) : null}
+
+      <Panel title={t('d.safety')} icon="🛡️">
+        {live ? <a href="tel:112" className="btn sm" style={{ background: 'var(--danger)' }}>🆘 112</a> : null}
+        <a className="btn sm ghost" href={navigateLink(job.geo)} target="_blank" rel="noopener noreferrer">🧭 {t('j.openMaps')}</a>
+        <Link href="/trust" className="btn sm quiet">{t('ts.title')} →</Link>
+      </Panel>
+    </>
+  );
+}
+
+/* ---------------------------------------------------------- search results */
+
+export function SearchPanel({
+  count, areaName, price, filters, filter, onFilter,
+}: {
+  count: number;
+  areaName: string;
+  price: { min: number; max: number } | null;
+  filters: readonly { id: string; label: string }[];
+  filter: string;
+  onFilter: (id: string) => void;
+}) {
+  const { t } = useT();
+  return (
+    <>
+      <Panel title={t('d.narrow')} icon="🎚️">
+        <div className="v-2">
+          {filters.map((f) => (
+            <button key={f.id} className={`chip${filter === f.id ? ' on' : ''}`}
+              style={{ justifyContent: 'flex-start', minHeight: 44 }}
+              onClick={() => onFilter(f.id)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title={t('d.foundIn')} icon="📍">
+        <StatRow label={areaName} value={count} />
+        {price ? (
+          <StatRow label={t('d.priceGuide')} value={<><Money amount={price.min} />–<Money amount={price.max} /></>} />
+        ) : null}
+      </Panel>
+
+      <HelpPanel />
+    </>
+  );
+}
+
+/* --------------------------------------------------------- worker profile */
+
+export function WorkerProfilePanel({ worker, km }: { worker: Worker; km: number }) {
+  const { db } = useStore();
+  const { t } = useT();
+  const reviews = db.reviews.filter((r) => r.workerId === worker.id);
+
+  return (
+    <>
+      <Panel title={t('d.workerAt')} icon="👷">
+        <VerifiedBadge v={worker.verification} small />
+        <StatRow label={t('w.jobsDone')} value={worker.jobsCompleted} />
+        <StatRow label={t('w.experience')} value={worker.experienceYears} />
+        <StatRow label={t('w.away')} value={formatKm(km)} hint={`~${etaMinutes(km)} ${t('c.min')}`} />
+        <StatRow label={t('w.respondsIn')} value={`${worker.responseMins} ${t('c.min')}`} />
+      </Panel>
+
+      <Panel title={t('w.reviews')} icon="⭐">
+        {worker.reviewCount
+          ? <Stars value={worker.rating} count={worker.reviewCount} />
+          : <p className="t-xs">{t('w.noReviews')}</p>}
+        {reviews.slice(0, 2).map((r) => (
+          <p key={r.id} className="t-xs" style={{ borderTop: '1px solid var(--hairline-2)', paddingTop: 8 }}>
+            &ldquo;{r.text}&rdquo;
+          </p>
+        ))}
+      </Panel>
+
+      <HelpPanel />
+    </>
+  );
+}
+
+/* ------------------------------------------------------------ bulk hiring */
+
+export function HirePanel({
+  shift, staff, hourly, workersNearby,
+}: { shift: ShiftPattern | null; staff: number; hourly: number; workersNearby: number }) {
+  const { t } = useT();
+  return (
+    <>
+      {shift ? (
+        <Panel title={t('sh.shiftPlan')} icon="🔁">
+          <p className="t-xs">{shiftSummary(shift, t)}</p>
+          <hr className="rule" />
+          <StatRow label={t('sh.hoursWeek')} value={hoursPerWeek(shift) * staff} />
+          <StatRow label={t('sh.perMonth')} value={<Money amount={monthlyCost(shift, hourly, staff)} />} />
+        </Panel>
+      ) : null}
+
+      <Panel title={t('d.nearby')} icon="👷">
+        <StatRow label={t('s.fAvailable')} value={workersNearby} />
+      </Panel>
+
+      <HelpPanel />
+    </>
   );
 }

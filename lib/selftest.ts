@@ -19,7 +19,15 @@ import { isValidAadhaarFormat, verifyIdentity } from './verify';
 import { PAYMENT_METHODS, EMPTY_PAYMENT, createOrder, holdFunds, releaseFunds, refund, methodInfo, statusKey } from './payments';
 import { cancelTerms, canCancel, travelFee, POLICY_ROWS } from './cancellation';
 import { telLink, waLink, navigateLink, sosMessage, e164, workerShareText } from './links';
-import { distanceKm, formatKm } from './geo';
+import { distanceKm, formatKm, AREAS } from './geo';
+import {
+  DAY_KEYS, crossesMidnight, hoursPerWeek, isValidShift, monthlyCost,
+  nextOccurrence, shiftHours, shiftSummary, totalHours, type ShiftPattern,
+} from './shifts';
+import { fitZoom, lerpGeo, midpoint, project, tilesFor, toPixel, travelProgress } from './tiles';
+
+/** Translate into English, for assertions that read a rendered string. */
+const en = (k: any) => t('en', k);
 
 (async () => {
   const db = seedDB();
@@ -272,6 +280,80 @@ import { distanceKm, formatKm } from './geo';
     a.jobs[0].title = 'mutated';
     return b.jobs[0].title !== 'mutated';
   })());
+
+  /* ============================================ 10c. SHIFTS (recurring rotas) */
+  section('Recurring shifts');
+  {
+    const evening: ShiftPattern = { days: [1, 3, 5], startMin: 21 * 60, endMin: 23 * 60 };
+    ok('a plain shift is the right length', shiftHours(evening) === 2, `${shiftHours(evening)} h`);
+    ok('hours per week multiplies by the days', hoursPerWeek(evening) === 6, `${hoursPerWeek(evening)} h`);
+    ok('a shift plan reads back in words', shiftSummary(evening, en).includes('9:00 pm'), shiftSummary(evening, en));
+
+    /* the bug this guards: 10pm-1am is three hours, not minus twenty-one */
+    const night: ShiftPattern = { days: [0, 6], startMin: 22 * 60, endMin: 1 * 60 };
+    ok('an overnight shift is not negative', shiftHours(night) === 3, `${shiftHours(night)} h`);
+    ok('an overnight shift is flagged as such', crossesMidnight(night));
+    ok('a same-day shift is not flagged', !crossesMidnight(evening));
+
+    ok('total hours needs an end date', totalHours(evening) === null);
+    ok('a bounded rota totals correctly', totalHours({ ...evening, weeks: 4 }) === 24, `${totalHours({ ...evening, weeks: 4 })} h`);
+
+    /* 4.345 weeks a month, not 4 — a flat 4 under-pays by ~8 days a year */
+    const cost = monthlyCost(evening, 200, 1);
+    ok('a month is 4.345 weeks, not 4', cost === Math.round(6 * 4.345 * 200), `Rs ${cost}`);
+    ok('more staff costs proportionally more', monthlyCost(evening, 200, 3) === cost * 3 || Math.abs(monthlyCost(evening, 200, 3) - cost * 3) <= 3);
+
+    ok('a rota with no days is not staffable', !isValidShift({ ...evening, days: [] }));
+    ok('a 20-hour shift is not staffable', !isValidShift({ days: [1], startMin: 0, endMin: 20 * 60 }));
+    ok('a normal rota is staffable', isValidShift(evening));
+
+    const mondayNoon = new Date(2026, 7, 17, 12, 0, 0).getTime();  // a Monday
+    const next = nextOccurrence(evening, mondayNoon);
+    ok('the next shift is later than now', !!next && next > mondayNoon);
+    ok('the next shift lands on a chosen day',
+       !!next && evening.days.includes(new Date(next).getDay()),
+       next ? new Date(next).toDateString() : '');
+    ok('every weekday has a label in every language',
+       LANGUAGES.every((l) => DAY_KEYS.every((k) => !!t(l.code, k as any))));
+  }
+
+  /* ==================================================== 10d. MAP PROJECTION */
+  section('Map and live tracking');
+  {
+    const kora = AREAS[0], hsr = AREAS[1];
+
+    /* Web Mercator sanity: further east is further right, further north is further up */
+    const a = project(kora.lat, kora.lng, 13);
+    const b = project(hsr.lat, hsr.lng, 13);
+    ok('east of a point projects to a larger x', b.x > a.x);
+    ok('south of a point projects to a larger y', b.y > a.y, 'HSR is south of Koramangala');
+
+    const z = fitZoom(kora, hsr, 640, 210);
+    ok('both points fit in the box at the chosen zoom', z >= 11 && z <= 16, `z${z}`);
+    const pa = toPixel(kora.lat, kora.lng, midpoint(kora, hsr), z, 640, 210);
+    const pb = toPixel(hsr.lat, hsr.lng, midpoint(kora, hsr), z, 640, 210);
+    ok('both markers land inside the box',
+       [pa, pb].every((p) => p.left >= 0 && p.left <= 640 && p.top >= 0 && p.top <= 210));
+    ok('the two markers are not on top of each other', Math.hypot(pa.left - pb.left, pa.top - pb.top) > 20);
+
+    const tiles = tilesFor(midpoint(kora, hsr), z, 640, 210);
+    ok('the box is fully covered by tiles', tiles.length >= 4, `${tiles.length} tiles`);
+    ok('every tile url is keyless',
+       tiles.every((x) => !/key|token|apikey|access_token/i.test(x.url)), tiles[0].url);
+    ok('no tile is requested from outside the pyramid',
+       tiles.every((x) => { const [zz, xx, yy] = x.key.split('/').map(Number);
+         return xx >= 0 && xx < 2 ** zz && yy >= 0 && yy < 2 ** zz; }));
+
+    /* travel interpolation — the honest, non-GPS one */
+    const t0 = 1_700_000_000_000;
+    ok('a journey not started is at zero', travelProgress(undefined, 20, t0) === 0);
+    ok('halfway through the time is halfway along', travelProgress(t0, 20, t0 + 10 * 60000) === 0.5);
+    ok('progress never exceeds one', travelProgress(t0, 20, t0 + 999 * 60000) === 1);
+    ok('progress never goes backwards', travelProgress(t0, 20, t0 - 60000) === 0);
+    const mid = lerpGeo(kora, hsr, 0.5);
+    ok('the halfway point is between the two ends',
+       mid.lat < kora.lat && mid.lat > hsr.lat, `${mid.lat.toFixed(4)}`);
+  }
 
   /* ==================================================== 11. PAYMENTS */
   section('Payments');

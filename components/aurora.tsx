@@ -443,6 +443,75 @@ export function PageFade({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* ------------------------------------------------------------ pull to refresh */
+
+/**
+ * Pull down at the top of a list to reload it.
+ *
+ * Deliberately narrow: touch only, only when the page is already scrolled to
+ * the very top, and never on a pointer device where the gesture does not
+ * exist and would only fight with text selection. The threshold is 68px —
+ * far enough that a normal downward flick to scroll never triggers it.
+ *
+ * `onRefresh` runs for at least 450ms even if it returns instantly, because a
+ * spinner that vanishes on the same frame reads as "nothing happened".
+ */
+export function PullToRefresh({
+  onRefresh, children,
+}: { onRefresh: () => void | Promise<void>; children: React.ReactNode }) {
+  const [pull, setPull] = React.useState(0);
+  const [busy, setBusy] = React.useState(false);
+  const startY = React.useRef<number | null>(null);
+  const reduce = useReducedMotion();
+
+  const THRESHOLD = 68;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (busy) return;
+    /* only from a genuine top-of-page rest position */
+    if (window.scrollY > 2) { startY.current = null; return; }
+    startY.current = e.touches[0].clientY;
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (startY.current == null || busy) return;
+    const dy = e.touches[0].clientY - startY.current;
+    if (dy <= 0) { setPull(0); return; }
+    /* rubber band: the further you pull, the less it gives */
+    setPull(Math.min(96, dy * 0.55));
+  };
+
+  const onTouchEnd = async () => {
+    if (startY.current == null) return;
+    startY.current = null;
+    if (pull < THRESHOLD || busy) { setPull(0); return; }
+    setBusy(true);
+    setPull(46);
+    const started = Date.now();
+    try { await onRefresh(); } finally {
+      const wait = Math.max(0, 450 - (Date.now() - started));
+      setTimeout(() => { setBusy(false); setPull(0); }, wait);
+    }
+  };
+
+  const ready = pull >= THRESHOLD;
+
+  /* `ptr-host` matters: above 1024px this div, not the <main> inside it, is
+     the direct child of the .shell grid, so it has to carry the same grid
+     placement the page would have carried. See globals.css §18b. */
+  return (
+    <div className="ptr-host" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
+      <div className={`ptr no-print${busy ? ' busy' : ''}`} style={{ height: pull }} aria-hidden={!busy}>
+        <span
+          className="spin"
+          style={reduce || busy ? undefined : { transform: `rotate(${pull * 4}deg)`, borderTopColor: ready ? 'var(--em-500)' : 'var(--ink-3)' }}
+        />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- bottom sheet */
 
 /**

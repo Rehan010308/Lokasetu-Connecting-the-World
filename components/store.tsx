@@ -22,6 +22,8 @@ interface StoreValue {
   ready: boolean;
   update: (fn: (d: DB) => DB) => void;
   reset: () => void;
+  /** Re-read from storage. What pull-to-refresh actually does. */
+  refresh: () => void;
 }
 
 const Ctx = createContext<StoreValue | null>(null);
@@ -47,13 +49,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [db, ready]);
 
   const update = useCallback((fn: (d: DB) => DB) => setDb((prev) => fn({ ...prev })), []);
+
+  /**
+   * Pull-to-refresh means "show me what is actually stored right now".
+   * With localStorage that is a genuine re-read, not theatre: another tab —
+   * the worker's window during a two-window demo — writes to the same key,
+   * and this is how that lands here. When this file becomes an API client,
+   * the body becomes a GET and nothing above it changes.
+   */
+  const refresh = useCallback(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as DB;
+      if (parsed && Array.isArray(parsed.workers) && Array.isArray(parsed.clients)) setDb(parsed);
+    } catch { /* leave the in-memory copy alone */ }
+  }, []);
   const reset = useCallback(() => {
     const fresh = seedDB();
     setDb(fresh);
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)); } catch {}
   }, []);
 
-  const value = useMemo(() => ({ db, ready, update, reset }), [db, ready, update, reset]);
+  const value = useMemo(() => ({ db, ready, update, reset, refresh }), [db, ready, update, reset, refresh]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

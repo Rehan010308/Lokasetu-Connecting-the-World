@@ -237,6 +237,7 @@ import { mr, bn, gu, pa } from './i18n-b';
 import { BOOK, type BookKey } from './i18n-book';
 import { PAY, type PayKey } from './i18n-pay';
 import { DESK, type DeskKey } from './i18n-desk';
+import { SHIFT, type ShiftKey } from './i18n-shift';
 
 /**
  * Booking, payment and trust strings are stored the other way round — one
@@ -244,11 +245,11 @@ import { DESK, type DeskKey } from './i18n-desk';
  * to review and keeps related translations side by side. `satisfies` in those
  * files enforces the same completeness guarantee.
  */
-export type TKey = CoreKey | BookKey | PayKey | DeskKey;
+export type TKey = CoreKey | BookKey | PayKey | DeskKey | ShiftKey;
 
 const CORE: Record<LangCode, Dict> = { en, hi, ta, te, kn, ml, mr, bn, gu, pa };
 
-const WIDE = { ...BOOK, ...PAY, ...DESK } as Record<string, Record<LangCode, string>>;
+const WIDE = { ...BOOK, ...PAY, ...DESK, ...SHIFT } as Record<string, Record<LangCode, string>>;
 
 /** Flattened per-language lookup, built once. */
 const DICTS: Record<LangCode, Record<string, string>> = (() => {

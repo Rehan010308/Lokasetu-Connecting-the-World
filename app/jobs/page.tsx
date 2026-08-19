@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { serviceName } from '@/lib/i18n-catalog';
 import { useMe, useStore, useT } from '@/components/store';
-import { Dock, GlassCard, Stagger, StaggerItem } from '@/components/aurora';
+import { Dock, GlassCard, PullToRefresh, Stagger, StaggerItem } from '@/components/aurora';
 import { Empty, HeaderTools, Money, Shell, TopBar } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
 import { ClientPanel, WorkerPanel } from '@/components/panels';
 
 export default function JobsPage() {
   const router = useRouter();
-  const { db, ready } = useStore();
+  const { db, ready, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
 
@@ -31,6 +31,7 @@ export default function JobsPage() {
   return (
     <Shell aside={isWorker && me.worker ? <WorkerPanel worker={me.worker} /> : <ClientPanel />}>
       <TopBar glassy title={t('n.jobs')} right={<HeaderTools />} />
+      <PullToRefresh onRefresh={refresh}>
       <main className="page v-4" style={{ paddingTop: 4 }}>
         {list.length === 0 ? (
           isWorker ? (
@@ -74,6 +75,7 @@ export default function JobsPage() {
           <Link href="/book" className="btn" style={{ marginTop: 8 }}>➕ {t('b.request')}</Link>
         ) : null}
       </main>
+      </PullToRefresh>
       <Dock items={isWorker ? navWorker(t) : navNormal(t)} />
     </Shell>
   );

@@ -10,7 +10,7 @@ import { rankWorkers, etaMinutes } from '@/lib/ai/match';
 import { formatKm } from '@/lib/geo';
 import { useMe, useStore, useT } from '@/components/store';
 import { useSpeech } from '@/components/kit';
-import { Dock, GlassCard, Magnetic, Reveal, Stagger, StaggerItem, VoiceOrb } from '@/components/aurora';
+import { Dock, GlassCard, Magnetic, PullToRefresh, Reveal, Stagger, StaggerItem, VoiceOrb } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
 import { ClientPanel, WorkerPanel } from '@/components/panels';
@@ -45,7 +45,7 @@ export default function Home() {
 
 function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void; speech: ReturnType<typeof useSpeech> }) {
   const router = useRouter();
-  const { db } = useStore();
+  const { db, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
 
@@ -70,6 +70,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
   return (
     <Shell aside={<ClientPanel />}>
       <TopBar title={me.name} subtitle={`${orgLine}📍 ${me.geo.areaName.split(',')[0]}`} right={<HeaderTools />} />
+      <PullToRefresh onRefresh={refresh}>
       <main className="page v-6" style={{ paddingTop: 4 }}>
 
         <Reveal>
@@ -178,6 +179,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
           </Reveal>
         ) : null}
       </main>
+      </PullToRefresh>
       <Dock items={navNormal(t)} />
     </Shell>
   );
@@ -186,7 +188,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
 /* =========================================================== WORKER HOME */
 
 function WorkerHome() {
-  const { db } = useStore();
+  const { db, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
   const w = me.worker!;
@@ -205,6 +207,7 @@ function WorkerHome() {
   return (
     <Shell aside={<WorkerPanel worker={w} />}>
       <TopBar title={w.name} subtitle={`📍 ${w.geo.areaName.split(',')[0]} · ${w.radiusKm} ${t('c.km')}`} right={<HeaderTools />} />
+      <PullToRefresh onRefresh={refresh}>
       <main className="page v-4" style={{ paddingTop: 4 }}>
 
         {/* verification nudge — the single highest-value action for a worker */}
@@ -284,6 +287,7 @@ function WorkerHome() {
           </Stagger>
         )}
       </main>
+      </PullToRefresh>
       <Dock items={navWorker(t)} />
     </Shell>
   );

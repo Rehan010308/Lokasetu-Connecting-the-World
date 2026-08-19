@@ -220,11 +220,56 @@ six languages at once.
 
 ---
 
-## 9. What is deliberately *not* here
+## 9. Screens wider than a hand
 
-- **No confetti.** Celebration animation was scoped out — the rank-up spring
-  and the tier ring carry the reward without a particle system to maintain.
-- **No street map.** The radar is schematic on purpose: a worker's home address
-  is not shown to a stranger, and a ring reads as "close to me" far faster than
-  a road network for a low-literacy user.
+The phone layer is the base cascade, not a set of overrides. Everything above
+§18 of `globals.css` describes a 375px screen and nothing below it can touch
+that — the people this is built for arrive on a ₹6,000 Android, and a laptop
+looking good is never worth a regression there.
+
+| Width | What changes |
+|---|---|
+| **< 768** | Nothing. Single column, floating dock. |
+| **768–1023** | Wider column, roomier gutters, every dock label shown, sticky header band painted full-bleed so it stops floating. |
+| **1024–1439** | Three panels: navigation rail, reading column, context panel. |
+| **1440+** | The same three, more generous. |
+
+The deck is a CSS grid on `.shell` with **explicit placement**, so the dock
+stays the last DOM child — where a screen reader wants it — while painting as
+the first visual column. Both side tracks are `auto`: a screen that renders
+neither rail nor context panel (login, the booking flow) collapses to one
+centred column instead of leaving a dead gutter.
+
+Three components change shape rather than scale:
+
+- **Dock → rail.** The floating pill becomes a standing sidebar with the brand
+  at its head. Same component, same `layoutId` pill animation, now vertical.
+- **Sheet → modal.** A sheet sliding up from the bottom edge of a 27-inch
+  monitor is a phone pattern in a costume: it puts the content 700px from
+  where the eye already is. Above 1024px it scales in at the optical centre,
+  and dragging is off — there is nothing to thumb-flick with a mouse.
+- **`Shell` gains an `aside`.** Rendered only above 1024px, which is the whole
+  rule about it: **nothing essential may live there.** If a feature is only
+  reachable from the context panel, the phone has lost it.
+
+## 10. The map
+
+Real OpenStreetMap raster tiles, positioned by hand (`lib/tiles.ts`) — no
+mapping SDK, no API key anywhere in the bundle. Tiles are background images on
+plain divs rather than `<img>`, so a tile that fails to load paints *nothing*
+instead of a broken-page glyph, and the styled backdrop underneath carries the
+route on its own. The screen degrades on aeroplane wifi instead of breaking.
+
+One honest caveat is printed on the screen itself: the dot the customer watches
+is **interpolated from the departure time, not reported by the worker's phone**.
+There is no realtime channel in this build. `travelProgress()` is the single
+function a websocket would replace.
+
+## 11. What is deliberately *not* here
+
+- **No confetti.** Celebration animation was scoped out.
+- **No live GPS.** See above — the UI says what it is rather than implying a
+  feed that does not exist.
+- **No worker home address on a map.** The route is drawn from where a worker
+  *set off*, never from where they live.
 - **No paid ranking.** Structural, not cosmetic.

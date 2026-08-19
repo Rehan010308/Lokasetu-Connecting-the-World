@@ -17,6 +17,9 @@ import { useSpeech } from '@/components/kit';
 import { CardSkeleton, Dock, GlassCard, Reveal, SPRING, Sheet } from '@/components/aurora';
 import { HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
+import { LiveMap } from '@/components/map';
+import { JobPanel } from '@/components/panels';
+import { shiftSummary, nextOccurrence, hoursPerWeek, formatTime } from '@/lib/shifts';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 
@@ -49,8 +52,10 @@ export default function JobPage() {
 
   function setStatus(s: JobStatus) { actions.setStatus(job!.id, s); }
 
+  const travelling = job.status === 'on_the_way';
+
   return (
-    <Shell>
+    <Shell aside={<JobPanel job={job} worker={worker ?? null} km={km} />}>
       <TopBar glassy back title={job.title} subtitle={t(`j.${job.status}` as any)} right={<HeaderTools />} />
       <main className="page v-4" style={{ paddingTop: 4 }}>
 
@@ -72,6 +77,58 @@ export default function JobPage() {
             </div>
           </GlassCard>
         </Reveal>
+
+        {/* ---------------- recurring shift, when this is a rota ---------------- */}
+        {job.shift ? (
+          <Reveal delay={0.02}>
+            <GlassCard className="pad" glow="in">
+              <div className="between" style={{ marginBottom: 8 }}>
+                <h3 className="t-h3">🔁 {t('sh.shiftPlan')}</h3>
+                <span className="tag in">{t('sh.recurring')}</span>
+              </div>
+              <p className="t-body" style={{ color: 'var(--ink)' }}>{shiftSummary(job.shift, t)}</p>
+              <hr className="rule" style={{ margin: '12px 0' }} />
+              <div className="kv" style={{ paddingTop: 0 }}>
+                <span className="k">{t('sh.hoursWeek')}</span>
+                <span className="v t-num">{hoursPerWeek(job.shift)}</span>
+              </div>
+              {job.staffCount && job.staffCount > 1 ? (
+                <div className="kv"><span className="k">{t('g.staffCount')}</span><span className="v t-num">{job.staffCount}</span></div>
+              ) : null}
+              {(() => {
+                const next = nextOccurrence(job.shift!, Date.now());
+                return next ? (
+                  <div className="kv">
+                    <span className="k">{t('sh.next')}</span>
+                    <span className="v">
+                      {new Date(next).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      {' · '}{formatTime(job.shift!.startMin)}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
+            </GlassCard>
+          </Reveal>
+        ) : null}
+
+        {/* ---------------- where everyone is ---------------- */}
+        {worker && job.status !== 'requested' && job.status !== 'completed' ? (
+          <Reveal delay={0.03}>
+            <GlassCard className="pad-s v-3">
+              <div className="between">
+                <h3 className="t-h3">{travelling ? `🛵 ${t('mp.onTheWay')}` : `🗺️ ${t('mp.route')}`}</h3>
+                {travelling ? <span className="tag em"><span className="live-dot" />{t('j.on_the_way')}</span> : null}
+              </div>
+              <LiveMap
+                from={worker.geo}
+                to={job.geo}
+                travelStartedAt={job.travelStartedAt}
+                live={travelling}
+                workerName={worker.name}
+              />
+            </GlassCard>
+          </Reveal>
+        ) : null}
 
         {/* ---------------- the other person + contact ---------------- */}
         {other ? (
