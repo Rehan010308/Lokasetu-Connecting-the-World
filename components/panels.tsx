@@ -171,7 +171,6 @@ export function JobPanel({ job, worker, km }: { job: Job; worker: Worker | null;
         <StatRow label={t('y.agreed')} value={<Money amount={amountFor(job)} />} />
         <StatRow label={t('c.done')} value={t(statusKey(job.payment.status) as any)} />
         {worker ? <StatRow label={t('w.away')} value={formatDistance(km, t('c.nearby'))} hint={`~${etaMinutes(km)} ${t('c.min')}`} /> : null}
-        {job.payment.protected ? <p className="note em" style={{ marginTop: 4 }}>🔒 {t('ts.protected')}</p> : null}
       </Panel>
 
       {job.shift ? (

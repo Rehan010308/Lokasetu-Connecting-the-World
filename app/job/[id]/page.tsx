@@ -222,8 +222,11 @@ export default function JobPage() {
           </>
         ) : null}
 
-        {/* ---------------- job progress ---------------- */}
-        {worker && job.status !== 'requested' ? (
+        {/* ---------------- job progress ----------------
+            Only rendered when there is genuinely an action or an outcome to
+            show. An empty card with a heading is noise. */}
+        {worker && job.status !== 'requested'
+          && (iAmWorker || ['worker_done', 'completed'].includes(job.status)) ? (
           <Reveal delay={0.04}>
             <GlassCard className="pad v-3">
               <p className="t-micro">{t('n.jobs')}</p>
@@ -237,8 +240,8 @@ export default function JobPage() {
                 </>
               ) : (
                 <>
-                  {job.status === 'on_the_way' ? <p className="note">🛵 {t('j.on_the_way')} · ~{etaMinutes(km)} {t('c.min')}</p> : null}
-                  {job.status === 'working' ? <p className="note">🔧 {t('j.working')}</p> : null}
+                  {/* status and ETA are already stated by the Contact Hub above;
+                      repeating them here was the duplication being cut */}
                   {job.status === 'worker_done' ? <button className="btn" onClick={() => { setStatus('completed'); setRateOpen(true); }}>✓ {t('j.confirm')}</button> : null}
                   {job.status === 'completed' && !review ? <button className="btn ghost" onClick={() => setRateOpen(true)}>⭐ {t('r.title')}</button> : null}
                   {job.status === 'completed' && review ? <p className="note em">🙏 {t('r.thanks')}</p> : null}
@@ -326,24 +329,30 @@ export default function JobPage() {
           </Reveal>
         ) : null}
 
-        {/* ---------------- cancellation policy, always visible ---------------- */}
+        {/* ---------------- cancellation ----------------
+            The full fee schedule used to occupy a card on every live job. It is
+            reference material, not a headline: collapsed by default, one tap
+            away, and the cancel action itself stays in plain sight. */}
         {job.status !== 'completed' && !job.status.startsWith('cancelled') ? (
           <Reveal delay={0.04}>
-            <GlassCard className="flat pad">
-              <p className="t-micro" style={{ marginBottom: 10 }}>{t('cx.policyTitle')}</p>
-              {POLICY_ROWS.map((r) => (
-                <div className="kv" key={r.whenKey}>
-                  <span className="k">{r.icon} {t(r.whenKey as any)}</span>
-                  <span className="v">{t(r.costKey as any)}</span>
-                </div>
-              ))}
-              {canCancel(job, iAmWorker ? 'worker' : 'client') ? (
-                <button className="btn quiet" style={{ marginTop: 10 }} onClick={() => setCancelOpen(true)}>
-                  {t('cx.cancel')}
-                </button>
-              ) : null}
-            </GlassCard>
+            <details className="glass flat pad-s">
+              <summary className="t-xs strong" style={{ cursor: 'pointer' }}>
+                🔄 {t('cx.policyTitle')}
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                {POLICY_ROWS.map((r) => (
+                  <div className="kv" key={r.whenKey}>
+                    <span className="k">{r.icon} {t(r.whenKey as any)}</span>
+                    <span className="v">{t(r.costKey as any)}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
           </Reveal>
+        ) : null}
+
+        {canCancel(job, iAmWorker ? 'worker' : 'client') ? (
+          <button className="btn quiet" onClick={() => setCancelOpen(true)}>{t('cx.cancel')}</button>
         ) : null}
 
         {job.cancellation ? (
