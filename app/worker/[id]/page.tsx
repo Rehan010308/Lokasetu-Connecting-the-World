@@ -78,7 +78,7 @@ function Profile() {
             {/* the four facts a customer actually decides on */}
             <div className="grid-2" style={{ marginTop: 16, gap: 10 }}>
               <div className="stat"><div className="n t-num">{w.jobsCompleted}</div><div className="l">{t('w.jobsDone')}</div></div>
-              <div className="stat"><div className="n t-num">{w.experienceYears}</div><div className="l">{t('w.experience')} ({t('c.years')})</div></div>
+              <div className="stat"><div className="n t-num">{w.experienceYears ?? '—'}</div><div className="l">{t('w.experience')} ({t('c.years')})</div></div>
               <div className="stat"><div className="n t-num">{formatDistance(km, t('c.nearby'))}</div><div className="l">{t('w.away')}</div></div>
               <div className="stat"><div className="n t-num">{w.responseMins} {t('c.min')}</div><div className="l">{t('w.respondsIn')}</div></div>
             </div>

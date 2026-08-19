@@ -19,6 +19,7 @@ import { HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } fro
 import { navNormal, navWorker } from '@/components/nav';
 import { LiveMap } from '@/components/map';
 import { JobPanel } from '@/components/panels';
+import { ContactHub } from '@/components/contact';
 import { shiftSummary, nextOccurrence, hoursPerWeek, formatTime } from '@/lib/shifts';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
@@ -39,6 +40,7 @@ export default function JobPage() {
   const [rateOpen, setRateOpen] = React.useState(false);
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [payBusy, setPayBusy] = React.useState(false);
+  const [chatOpen, setChatOpen] = React.useState(false);
 
   if (!ready) return <Shell><div className="page" style={{ paddingTop: 90 }}><CardSkeleton /></div></Shell>;
   if (!job) return <Shell><TopBar back title="—" /><main className="page"><p className="t-body">{t('e.generic')}</p></main></Shell>;
@@ -53,11 +55,55 @@ export default function JobPage() {
   function setStatus(s: JobStatus) { actions.setStatus(job!.id, s); }
 
   const travelling = job.status === 'on_the_way';
+  /* A booking is "confirmed" the moment a worker takes it — from then on the
+     screen is about that person, not about the request. */
+  const confirmed = Boolean(worker) && job.status !== 'requested';
 
   return (
     <Shell aside={<JobPanel job={job} worker={worker ?? null} km={km} />}>
       <TopBar glassy back title={job.title} subtitle={t(`j.${job.status}` as any)} right={<HeaderTools />} />
       <main className="page v-4" style={{ paddingTop: 4 }}>
+
+        {/* ---------------- CONTACT HUB ----------------
+            Once a worker has accepted, this is what the screen is for: ring
+            them, WhatsApp them, see where they are. It leads; everything else
+            follows. Before acceptance there is nobody to contact, so the
+            request details lead instead. */}
+        {confirmed && other ? (
+          <Reveal>
+            <ContactHub
+              job={job}
+              worker={worker ?? null}
+              client={client ?? null}
+              iAmWorker={iAmWorker}
+              messageCount={db.messages.filter((m) => m.jobId === job.id).length}
+              showMessages={chatOpen}
+              onMessages={() => setChatOpen((v) => !v)}
+            />
+          </Reveal>
+        ) : null}
+
+        {confirmed && chatOpen ? <Chat jobId={job.id} /> : null}
+
+        {/* ---------------- where everyone is ---------------- */}
+        {worker && job.status !== 'requested' && job.status !== 'completed' ? (
+          <Reveal delay={0.03}>
+            <GlassCard className="pad-s v-3">
+              <div className="between">
+                <h3 className="t-h3">{travelling ? `🛵 ${t('mp.onTheWay')}` : `🗺️ ${t('mp.route')}`}</h3>
+                {travelling ? <span className="tag em"><span className="live-dot" />{t('j.on_the_way')}</span> : null}
+              </div>
+              <LiveMap
+                from={worker.geo}
+                to={job.geo}
+                travelStartedAt={job.travelStartedAt}
+                live={travelling}
+                workerName={worker.name}
+              />
+            </GlassCard>
+          </Reveal>
+        ) : null}
+
 
         {/* ---------------- what and when ---------------- */}
         <Reveal>
@@ -111,27 +157,11 @@ export default function JobPage() {
           </Reveal>
         ) : null}
 
-        {/* ---------------- where everyone is ---------------- */}
-        {worker && job.status !== 'requested' && job.status !== 'completed' ? (
-          <Reveal delay={0.03}>
-            <GlassCard className="pad-s v-3">
-              <div className="between">
-                <h3 className="t-h3">{travelling ? `🛵 ${t('mp.onTheWay')}` : `🗺️ ${t('mp.route')}`}</h3>
-                {travelling ? <span className="tag em"><span className="live-dot" />{t('j.on_the_way')}</span> : null}
-              </div>
-              <LiveMap
-                from={worker.geo}
-                to={job.geo}
-                travelStartedAt={job.travelStartedAt}
-                live={travelling}
-                workerName={worker.name}
-              />
-            </GlassCard>
-          </Reveal>
-        ) : null}
-
-        {/* ---------------- the other person + contact ---------------- */}
-        {other ? (
+        {/* ---------------- the other person + contact ----------------
+            Only before confirmation, or for a worker looking at a request they
+            have not taken. After confirmation the Contact Hub above covers it,
+            and showing both was the duplication the cleanup pass was for. */}
+        {other && !confirmed ? (
           <Reveal delay={0.04}>
             <GlassCard className="pad">
               <div className="h" style={{ gap: 13 }}>
@@ -330,9 +360,6 @@ export default function JobPage() {
             ) : null}
           </GlassCard>
         ) : null}
-
-        {/* ---------------- messages ---------------- */}
-        {worker && job.status !== 'requested' ? <Chat jobId={job.id} /> : null}
 
         {/* ---------------- share ---------------- */}
         <a className="btn quiet" href={waShare(jobShareText(job.title, job.geo.areaName, origin(), job.id))}

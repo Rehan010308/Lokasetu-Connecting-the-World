@@ -111,7 +111,8 @@ export interface Worker {
   category: CategoryId;
   /** service ids from lib/catalog — this is what search filters on */
   services: string[];
-  experienceYears: number;
+  /** null = the worker never told us. Never render a guess in its place. */
+  experienceYears: number | null;
 
   /** verbatim transcript, kept in the script they spoke */
   rawSpeech: string;

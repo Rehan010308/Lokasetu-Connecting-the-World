@@ -119,6 +119,7 @@ const en = (k: any) => t('en', k);
   const p1 = await extractWorkerProfile('I do electrical wiring and fan fitting, six years experience');
   ok('EN speech -> electrical', p1.category === 'electrical', `${p1.category} ${p1.experienceYears}y [${p1.services}]`);
   ok('EN speech -> 6 years', p1.experienceYears === 6);
+  ok('stated experience is not re-asked', !p1.missing.includes('years'));
   ok('bio was written', p1.bio.length > 10, `"${p1.bio}"`);
 
   const p2 = await extractWorkerProfile('मैं बिजली की वायरिंग और पंखा लगाता हूँ, 8 साल का अनुभव', 'hi');
@@ -218,6 +219,35 @@ const en = (k: any) => t('en', k);
      db.workers.every((w) => w.services.every((s) => categoryOfService(s) === w.category)));
   ok('no points, ranks or trust scores on any worker',
      db.workers.every((w) => !('trust' in w) && !('points' in w) && !('tier' in w)));
+
+  /* ============================ 9b. THE AI ASKS INSTEAD OF ASSUMING */
+  section('Onboarding asks, never assumes');
+  {
+    /* THE BUG: extractYears() ended with `return 1`, so a worker who said only
+       "I am an electrician" got a public profile claiming one year of
+       experience — a number the product invented and then showed to
+       customers as fact. */
+    const bare = await extractWorkerProfile('I am an electrician', 'en');
+    ok('experience is null when nobody stated it', bare.experienceYears === null, String(bare.experienceYears));
+    ok('unstated experience becomes a question', bare.missing.includes('years'));
+    ok('the bio does not claim years it was never told',
+       !/\d/.test(bare.bio), JSON.stringify(bare.bio));
+
+    ok('languages are always asked', bare.missing.includes('languages'));
+    ok('availability is always asked', bare.missing.includes('availability'));
+    ok('service area is always asked', bare.missing.includes('area'));
+
+    const rich = await extractWorkerProfile('I do fan repair and wiring, 12 years experience', 'en');
+    ok('stated experience is kept', rich.experienceYears === 12, `${rich.experienceYears}`);
+    ok('stated experience is not asked again', !rich.missing.includes('years'));
+
+    const vague = await extractWorkerProfile('something something', 'en');
+    ok('a transcript with no trade asks for the trade', vague.missing.includes('services'));
+    ok('a transcript with no trade invents no experience', vague.experienceYears === null);
+
+    ok('every gap has a question to show for it',
+       (['years', 'services', 'languages'] as const).every((g) => !!t('en', `q.${g}` as any)));
+  }
 
   /* ==================================================== 10. BOOKING FLOW */
   section('Booking lifecycle');

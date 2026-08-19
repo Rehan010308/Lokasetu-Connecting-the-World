@@ -257,7 +257,7 @@ export function WorkerProfilePanel({ worker, km }: { worker: Worker; km: number 
       <Panel title={t('d.workerAt')} icon="👷">
         <VerifiedBadge v={worker.verification} small />
         <StatRow label={t('w.jobsDone')} value={worker.jobsCompleted} />
-        <StatRow label={t('w.experience')} value={worker.experienceYears} />
+        <StatRow label={t('w.experience')} value={worker.experienceYears ?? '—'} />
         <StatRow label={t('w.away')} value={formatDistance(km, t('c.nearby'))} hint={`~${etaMinutes(km)} ${t('c.min')}`} />
         <StatRow label={t('w.respondsIn')} value={`${worker.responseMins} ${t('c.min')}`} />
       </Panel>

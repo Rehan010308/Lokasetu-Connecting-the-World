@@ -189,14 +189,29 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
 
 /* =========================================================== WORKER HOME */
 
+/**
+ * FIND A JOB
+ *
+ * The old version led with a 148px microphone and nothing else — an
+ * impressive demo and a poor tool. A worker opening this screen wants to see
+ * work: what is near, what pays, what is urgent. So the page leads with the
+ * jobs, gives them a search box and four filters, and keeps voice as a small
+ * button INSIDE the search field for the many workers who would rather speak
+ * than type. Voice assists; it no longer occupies the fold.
+ */
 function WorkerHome() {
   const { db, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
   const w = me.worker!;
 
-  /* Jobs this worker can actually do, inside the radius they chose. */
-  const feed = db.jobs
+  const [q, setQ] = React.useState('');
+  const [sort, setSort] = React.useState<'all' | 'closest' | 'urgent' | 'paid'>('all');
+  const speech = useSpeech(lang, setQ);
+
+  /* Only this worker's trade, only inside the radius they chose. The filter
+     lives in rankWorkers so there is exactly one rule, tested in selftest. */
+  let feed = db.jobs
     .filter((j) => j.status === 'requested')
     .map((j) => {
       const [m] = rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]);
@@ -204,24 +219,65 @@ function WorkerHome() {
     })
     .filter(Boolean) as { job: typeof db.jobs[number]; km: number }[];
 
+  const text = q.trim().toLowerCase();
+  if (text) {
+    feed = feed.filter(({ job }) =>
+      job.title.toLowerCase().includes(text) ||
+      job.rawRequest.toLowerCase().includes(text) ||
+      (job.serviceId ? serviceName(job.serviceId, lang).toLowerCase().includes(text) : false));
+  }
+
+  if (sort === 'closest') feed = [...feed].sort((a, b) => a.km - b.km);
+  if (sort === 'paid') feed = [...feed].sort((a, b) => b.job.priceMax - a.job.priceMax);
+  if (sort === 'urgent') feed = feed.filter(({ job }) => job.urgency === 'emergency' || job.urgency === 'today');
+
   const active = db.jobs.filter((j) => j.assignedWorkerId === w.id && !DEAD_STATUSES.includes(j.status));
+
+  const FILTERS = [
+    { id: 'all', label: t('f.all') },
+    { id: 'closest', label: `📍 ${t('f.closest')}` },
+    { id: 'urgent', label: `⚡ ${t('f.urgent')}` },
+    { id: 'paid', label: `💰 ${t('f.bestPaid')}` },
+  ] as const;
 
   return (
     <Shell aside={<WorkerPanel worker={w} />}>
-      <TopBar title={w.name} subtitle={`📍 ${w.geo.areaName.split(',')[0]} · ${w.radiusKm} ${t('c.km')}`} right={<HeaderTools />} />
+      <TopBar title={w.name} subtitle={`📍 ${w.geo.areaName} · ${w.radiusKm} ${t('c.km')}`} right={<HeaderTools />} />
       <PullToRefresh onRefresh={refresh}>
       <main className="page v-4" style={{ paddingTop: 4 }}>
+
+        {/* work in hand comes before work on offer */}
+        {active.length ? (
+          <section className="v-3">
+            <h2 className="t-h3">{t('d.active')}</h2>
+            <div className="v-3 grid-cards">
+              {active.map((j) => (
+                <Link key={j.id} href={`/job/${j.id}`} style={{ display: 'block' }}>
+                  <GlassCard interactive className="pad-s" glow="em">
+                    <div className="between">
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="t-sm strong clamp-2">{j.title}</div>
+                        <div className="t-xs" style={{ marginTop: 3 }}>{j.geo.address ?? j.geo.areaName}</div>
+                      </div>
+                      <span className="tag em">{t(`j.${j.status}` as any)}</span>
+                    </div>
+                  </GlassCard>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* verification nudge — the single highest-value action for a worker */}
         {w.verification.status !== 'verified' ? (
           <Reveal>
             <Link href="/verify" style={{ display: 'block' }}>
-              <GlassCard interactive className="pad" glow="gd">
+              <GlassCard interactive className="pad-s" glow="gd">
                 <div className="h-4">
-                  <div style={{ fontSize: 28 }} aria-hidden>🪪</div>
+                  <div style={{ fontSize: 24 }} aria-hidden>🪪</div>
                   <div className="grow">
-                    <div className="t-h3">{t('v.title')}</div>
-                    <p className="t-xs" style={{ marginTop: 3 }}>{t('v.sub')}</p>
+                    <div className="t-sm strong">{t('v.title')}</div>
+                    <p className="t-xs" style={{ marginTop: 2 }}>{t('v.sub')}</p>
                   </div>
                   <span aria-hidden style={{ fontSize: 20, color: 'var(--gd-600)' }}>›</span>
                 </div>
@@ -230,36 +286,46 @@ function WorkerHome() {
           </Reveal>
         ) : null}
 
-        {active.length ? (
-          <section className="v-3">
-            <h2 className="t-h3">{t('n.jobs')}</h2>
-            {active.map((j) => (
-              <Link key={j.id} href={`/job/${j.id}`} style={{ display: 'block' }}>
-                <GlassCard interactive className="pad-s" glow="em">
-                  <div className="between">
-                    <div className="grow" style={{ minWidth: 0 }}>
-                      <div className="t-sm strong">{j.title}</div>
-                      <div className="t-xs" style={{ marginTop: 3 }}>{j.geo.address ?? j.geo.areaName}</div>
-                    </div>
-                    <span className="tag em">{t(`j.${j.status}` as any)}</span>
-                  </div>
-                </GlassCard>
-              </Link>
-            ))}
-          </section>
-        ) : null}
-
         <div className="between">
-          <h2 className="t-h2">{t('h.myJobs')}</h2>
+          <h1 className="t-h1">{t('f.title')}</h1>
           <span className="tag">{feed.length}</span>
         </div>
+
+        {/* search, with the microphone as a button inside it rather than a
+            148px orb above it */}
+        <form className="field hero-search" onSubmit={(e) => e.preventDefault()}>
+          <span aria-hidden style={{ fontSize: 18, opacity: 0.5 }}>🔎</span>
+          <input
+            className="input bare grow"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('f.searchPh')}
+            aria-label={t('f.searchPh')}
+          />
+          <VoiceOrb
+            compact size={40} live={speech.listening}
+            label={t('h.speak')}
+            onClick={() => (speech.listening ? speech.stop() : speech.start(q))}
+          />
+        </form>
+
+        <div className="scroll-x">
+          {FILTERS.map((f) => (
+            <button key={f.id} className={`chip${sort === f.id ? ' on' : ''}`} onClick={() => setSort(f.id as any)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <p className="t-micro">🔒 {t('f.yourTrade')} · {categoryName(w.category, lang)}</p>
 
         {feed.length === 0 ? (
           <Empty
             icon="🧰"
-            title={t('x.noFeedTitle')}
-            text={t('x.noFeedBody')}
-            tips={workerTips(w, t)}
+            title={text ? t('f.noMatch') : t('x.noFeedTitle')}
+            text={text ? t('x.noResBody') : t('x.noFeedBody')}
+            tips={text ? undefined : workerTips(w, t)}
+            action={text ? { href: '/', label: t('f.all') } : undefined}
           />
         ) : (
           <Stagger className="v-3 grid-cards" gap={0.06}>
@@ -267,7 +333,7 @@ function WorkerHome() {
               <StaggerItem key={job.id}>
                 <Link href={`/job/${job.id}`} style={{ display: 'block' }}>
                   <GlassCard interactive className="pad">
-                    <div className="t-h3" style={{ lineHeight: 1.3 }}>{job.title}</div>
+                    <div className="t-h3 clamp-2" style={{ lineHeight: 1.3 }}>{job.title}</div>
                     <div className="h-2 wrap" style={{ gap: 7, marginTop: 10 }}>
                       <span className="tag in">{t(`u.${job.urgency}` as any)}</span>
                       <span className="tag">📍 {formatDistance(km, t('c.nearby'))}</span>

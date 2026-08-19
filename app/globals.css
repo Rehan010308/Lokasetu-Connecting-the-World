@@ -1097,6 +1097,27 @@ select.input option { background: var(--canvas-2); color: var(--ink); }
 .scroll-x::-webkit-scrollbar { display: none; }
 .scroll-x > * { scroll-snap-align: start; flex: none; }
 
+/* ---------------------------------------------------------- 15a2. CONTACT HUB */
+
+.hub-who { display: flex; align-items: center; gap: 15px; }
+.hub-who .t-h2 { line-height: 1.15; }
+
+/* Three equal actions. Stacked-then-side-by-side rather than three tiny
+   buttons on a 320px phone, where "Call" must stay a thumb-sized target. */
+.hub-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin: 18px 0 4px;
+}
+.hub-actions > :first-child { grid-column: 1 / -1; }
+.hub-facts { margin-top: 4px; }
+
+@media (min-width: 560px) {
+  .hub-actions { grid-template-columns: repeat(3, 1fr); }
+  .hub-actions > :first-child { grid-column: auto; }
+}
+
 /* ------------------------------------------------------------------ 15b. MAP */
 
 .map {

@@ -2,14 +2,28 @@ import type { CategoryId, LangCode } from '../types';
 import { matchServices, service, servicesOf } from '../catalog';
 import { serviceName } from '../i18n-catalog';
 
+/**
+ * What the worker did not tell us.
+ *
+ * The point of this type: a gap is a QUESTION TO ASK, never a value to invent.
+ * extractYears used to `return 1` when nobody had mentioned experience, so a
+ * plumber of twenty years who said only "I do plumbing" got a profile claiming
+ * one year — a number the product made up and then showed to customers as
+ * fact. Now the absence is reported and the onboarding asks.
+ */
+export type ProfileGap = 'years' | 'services' | 'languages' | 'availability' | 'area';
+
 export interface ExtractedProfile {
   category: CategoryId;
   /** service ids — what search actually filters on */
   services: string[];
-  experienceYears: number;
+  /** null means THEY DID NOT SAY. Never guess a number here. */
+  experienceYears: number | null;
   /** AI-written bio, in the worker's own language */
   bio: string;
   confidence: number;
+  /** what still has to be asked before this profile can go live */
+  missing: ProfileGap[];
 }
 
 /**
@@ -35,8 +49,9 @@ export async function extractWorkerProfile(
       category: 'maintenance',
       services: [],
       experienceYears: years,
-      bio: buildBio([], years, lang),
+      bio: '',
       confidence: 0,
+      missing: ['services', 'years', 'languages', 'availability', 'area'],
     };
   }
 
@@ -53,12 +68,24 @@ export async function extractWorkerProfile(
   const services = picked.length ? picked.slice(0, 5) : servicesOf(category).slice(0, 3).map((s) => s.id);
 
   const total = hits.reduce((n, h) => n + h.hits, 0);
+
+  /* Everything the transcript did not establish. The onboarding turns each of
+     these into a question rather than a default. Languages, availability and
+     area are always asked: nobody volunteers them unprompted, and guessing
+     "speaks Hindi, available anytime, works everywhere" would be three
+     fabrications on a profile a customer is about to trust. */
+  const missing: ProfileGap[] = [];
+  if (years === null) missing.push('years');
+  if (picked.length < 2) missing.push('services');
+  missing.push('languages', 'availability', 'area');
+
   return {
     category,
     services,
     experienceYears: years,
     bio: buildBio(services, years, lang),
     confidence: Math.min(1, total / 6),
+    missing,
   };
 }
 
@@ -78,7 +105,8 @@ const NUM_WORDS: Record<string, number> = {
 
 const YEAR_WORDS = 'years?|yrs?|saal|साल|वर्ष|ஆண்டு|வருட|సంవత్సర|ఏళ్ల|വർഷ|ವರ್ಷ|वर्षे|বছর|વર્ષ|ਸਾਲ';
 
-function extractYears(text: string): number {
+/** Years of experience, or null when the worker never mentioned any. */
+function extractYears(text: string): number | null {
   const low = text.toLowerCase();
   const digit = low.match(new RegExp(`(\\d{1,2})\\s*\\+?\\s*(?:${YEAR_WORDS})`));
   if (digit) return clamp(parseInt(digit[1], 10));
@@ -90,17 +118,21 @@ function extractYears(text: string): number {
     const n = parseInt(bare[1], 10);
     if (n >= 1 && n <= 45) return n;
   }
-  return 1;
+  /* Nothing said. Say so — do not pick a number on the worker's behalf. */
+  return null;
 }
 
 const clamp = (n: number) => (!Number.isFinite(n) || n < 1 ? 1 : Math.min(n, 50));
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** A short bio in the worker's own language, built from what they said. */
-function buildBio(services: string[], years: number, lang: LangCode): string {
+function buildBio(services: string[], years: number | null, lang: LangCode): string {
   const names = services.slice(0, 3).map((s) => serviceName(s, lang));
   const list = names.join(', ');
-  const tmpl: Record<LangCode, (l: string, y: number) => string> = {
+
+  /* Two templates, because a bio must not claim experience nobody stated.
+     Until the worker answers the question, the sentence simply is not there. */
+  const withYears: Record<LangCode, (l: string, y: number) => string> = {
     en: (l, y) => `Does ${l.toLowerCase()}. ${y} years of experience.`,
     hi: (l, y) => `${l} का काम करते हैं। ${y} साल का अनुभव।`,
     ta: (l, y) => `${l} செய்கிறார். ${y} வருட அனுபவம்.`,
@@ -112,5 +144,19 @@ function buildBio(services: string[], years: number, lang: LangCode): string {
     gu: (l, y) => `${l} નું કામ કરે છે. ${y} વર્ષનો અનુભવ.`,
     pa: (l, y) => `${l} ਦਾ ਕੰਮ ਕਰਦੇ ਹਨ। ${y} ਸਾਲ ਦਾ ਤਜਰਬਾ।`,
   };
-  return tmpl[lang](list || '—', years);
+  const noYears: Record<LangCode, (l: string) => string> = {
+    en: (l) => `Does ${l.toLowerCase()}.`,
+    hi: (l) => `${l} का काम करते हैं।`,
+    ta: (l) => `${l} செய்கிறார்.`,
+    te: (l) => `${l} చేస్తారు.`,
+    kn: (l) => `${l} ಮಾಡುತ್ತಾರೆ.`,
+    ml: (l) => `${l} ചെയ്യുന്നു.`,
+    mr: (l) => `${l} चे काम करतात.`,
+    bn: (l) => `${l} করেন।`,
+    gu: (l) => `${l} નું કામ કરે છે.`,
+    pa: (l) => `${l} ਦਾ ਕੰਮ ਕਰਦੇ ਹਨ।`,
+  };
+
+  const l = list || '—';
+  return years === null ? noYears[lang](l) : withYears[lang](l, years);
 }

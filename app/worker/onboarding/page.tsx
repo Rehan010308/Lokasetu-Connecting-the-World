@@ -3,7 +3,8 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { LANGUAGES } from '@/lib/i18n';
-import { AREAS, nearestArea } from '@/lib/geo';
+import { nearestArea } from '@/lib/geo';
+import { CITIES, city, geoOf } from '@/lib/cities';
 import { CATEGORIES, servicesOf, service } from '@/lib/catalog';
 import { categoryName, serviceName } from '@/lib/i18n-catalog';
 import { extractWorkerProfile, type ExtractedProfile } from '@/lib/ai/profile';
@@ -14,8 +15,8 @@ import { GlassCard, Reveal, Ring, SPRING, Stagger, StaggerItem } from '@/compone
 import { HeaderTools, PhoneOtp, Shell, TopBar, VoiceField } from '@/components/kit';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
-type Step = 'lang' | 'phone' | 'speak' | 'confirm' | 'where' | 'when' | 'done';
-const ORDER: Step[] = ['lang', 'phone', 'speak', 'confirm', 'where', 'when', 'done'];
+type Step = 'lang' | 'phone' | 'speak' | 'confirm' | 'ask' | 'where' | 'when' | 'done';
+const ORDER: Step[] = ['lang', 'phone', 'speak', 'confirm', 'ask', 'where', 'when', 'done'];
 
 /** The AI's questions, in the worker's own language. */
 const ASK: Record<Step, Record<LangCode, string>> = {
@@ -49,6 +50,18 @@ const ASK: Record<Step, Record<LangCode, string>> = {
     bn: 'এখন বলুন আপনি কী কাজ করেন। বন্ধুকে বলার মতো করে বলুন।',
     gu: 'હવે કહો તમે શું કામ કરો છો. મિત્રને કહો તેમ બોલો.',
     pa: 'ਹੁਣ ਦੱਸੋ ਤੁਸੀਂ ਕੀ ਕੰਮ ਕਰਦੇ ਹੋ। ਦੋਸਤ ਨੂੰ ਦੱਸਣ ਵਾਂਗ ਬੋਲੋ।',
+  },
+  ask: {
+    en: 'A few things you did not mention. I will not guess them.',
+    hi: 'कुछ बातें आपने नहीं बताईं। मैं उनका अंदाज़ा नहीं लगाऊँगा।',
+    ta: 'சில விஷயங்களை நீங்கள் சொல்லவில்லை. அவற்றை நான் ஊகிக்க மாட்டேன்.',
+    te: 'కొన్ని విషయాలు మీరు చెప్పలేదు. వాటిని నేను ఊహించను.',
+    kn: 'ಕೆಲವು ವಿಷಯಗಳನ್ನು ನೀವು ಹೇಳಲಿಲ್ಲ. ಅವನ್ನು ನಾನು ಊಹಿಸುವುದಿಲ್ಲ.',
+    ml: 'ചില കാര്യങ്ങൾ നിങ്ങൾ പറഞ്ഞില്ല. അവ ഞാൻ ഊഹിക്കില്ല.',
+    mr: 'काही गोष्टी तुम्ही सांगितल्या नाहीत. त्यांचा मी अंदाज लावणार नाही.',
+    bn: 'কিছু বিষয় আপনি বলেননি। সেগুলো আমি অনুমান করব না।',
+    gu: 'કેટલીક વાતો તમે કહી નથી. તેનું હું અનુમાન નહીં કરું.',
+    pa: 'ਕੁਝ ਗੱਲਾਂ ਤੁਸੀਂ ਨਹੀਂ ਦੱਸੀਆਂ। ਮੈਂ ਉਨ੍ਹਾਂ ਦਾ ਅੰਦਾਜ਼ਾ ਨਹੀਂ ਲਾਵਾਂਗਾ।',
   },
   confirm: {
     en: 'This is what I understood. Did I get it right?', hi: 'मैंने यह समझा। क्या यह सही है?',
@@ -105,9 +118,15 @@ export default function Onboarding() {
   const [speech, setSpeech] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [profile, setProfile] = React.useState<ExtractedProfile | null>(null);
-  const [geo, setGeo] = React.useState<Geo>(AREAS[0]);
+  const [cityId, setCityId] = React.useState('blr');
+  const [geo, setGeo] = React.useState<Geo>(geoOf('blr_koramangala')!);
   const [radiusKm, setRadiusKm] = React.useState(5);
   const [availability, setAvailability] = React.useState<Availability>('anytime');
+  /* Answers to the questions the AI is not allowed to guess. */
+  const [gapIdx, setGapIdx] = React.useState(0);
+  const [years, setYears] = React.useState<number | null>(null);
+  const [languages, setLanguages] = React.useState<LangCode[]>([]);
+  const [fullTime, setFullTime] = React.useState<boolean | null>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
 
   const idx = ORDER.indexOf(step);
@@ -130,10 +149,12 @@ export default function Onboarding() {
     if (!profile) return;
     registerWorker({
       name: name.trim() || 'Worker',
-      phone, lang, languages: [lang],
+      phone, lang,
+      languages: languages.length ? languages : [lang],
       category: profile.category,
       services: profile.services,
-      experienceYears: profile.experienceYears,
+      /* Only ever what the worker said. `null` reaches the profile as "—". */
+      experienceYears: years,
       rawSpeech: speech,        // kept in the script they actually spoke
       bio: profile.bio,
       geo, radiusKm, availability,
@@ -214,10 +235,12 @@ export default function Onboarding() {
                     <span className="k">{t('s.pickService')}</span>
                     <span className="v">{categoryName(profile.category, lang)}</span>
                   </div>
-                  <div className="kv">
-                    <span className="k">{t('w.experience')}</span>
-                    <span className="v">{profile.experienceYears} {t('c.years')}</span>
-                  </div>
+                  {profile.experienceYears !== null ? (
+                    <div className="kv">
+                      <span className="k">{t('w.experience')}</span>
+                      <span className="v">{profile.experienceYears} {t('c.years')}</span>
+                    </div>
+                  ) : null}
                   <div className="h-2 wrap" style={{ gap: 8, marginTop: 14 }}>
                     {profile.services.map((s) => (
                       <span key={s} className="chip on" style={{ minHeight: 36, fontSize: 13.5 }}>{serviceName(s, lang)}</span>
@@ -254,7 +277,13 @@ export default function Onboarding() {
                 </details>
 
                 <button className="btn" disabled={!profile.services.length}
-                  onClick={() => { say('me', t('o.correct')); setStep('where'); say('ai', ASK.where[lang]); }}>
+                  onClick={() => {
+                    say('me', t('o.correct'));
+                    setYears(profile.experienceYears);
+                    setLanguages([lang]);
+                    setStep('ask');
+                    say('ai', ASK.ask[lang]);
+                  }}>
                   ✓ {t('o.correct')}
                 </button>
                 <button className="btn quiet" onClick={() => { setSpeech(''); setProfile(null); setStep('speak'); }}>
@@ -263,28 +292,155 @@ export default function Onboarding() {
               </>
             ) : null}
 
+            {/* ------------------------------------------------------------
+                THE QUESTIONS THE AI IS NOT ALLOWED TO SKIP
+
+                Everything here is something the transcript did NOT establish.
+                The old build filled these in silently — a worker who said only
+                "I am an electrician" got a profile claiming one year of
+                experience, one language and full availability, none of which
+                they had said. One question at a time, answers only.
+               ------------------------------------------------------------ */}
+            {step === 'ask' && profile ? (() => {
+              const gaps = profile.missing.filter((g) => g === 'years' || g === 'services' || g === 'languages');
+              const gap = gaps[gapIdx];
+
+              const next = () => {
+                if (gapIdx + 1 < gaps.length) { setGapIdx(gapIdx + 1); return; }
+                setStep('where');
+                say('ai', ASK.where[lang]);
+              };
+
+              if (!gap) { setStep('where'); return null; }
+
+              return (
+                <>
+                  <p className="t-micro">{t('q.sub')} · {gapIdx + 1}/{gaps.length}</p>
+
+                  {gap === 'years' ? (
+                    <GlassCard className="pad v-3">
+                      <h2 className="t-h3">{t('q.years')}</h2>
+                      <div className="h-2 wrap" style={{ gap: 8 }}>
+                        {[1, 2, 3, 5, 8, 10, 15, 20].map((n) => (
+                          <button key={n} className={`chip${years === n ? ' on' : ''}`}
+                            style={{ minWidth: 62, justifyContent: 'center', minHeight: 46 }}
+                            onClick={() => setYears(n)}>
+                            {n}{n === 20 ? '+' : ''}
+                          </button>
+                        ))}
+                      </div>
+                      <button className="btn" disabled={years === null}
+                        onClick={() => { say('me', `${years} ${t('c.years')}`); next(); }}>
+                        {t('c.next')}
+                      </button>
+                      <button className="btn quiet" onClick={() => { setYears(null); say('me', t('q.notSure')); next(); }}>
+                        {t('q.notSure')}
+                      </button>
+                    </GlassCard>
+                  ) : null}
+
+                  {gap === 'services' ? (
+                    <GlassCard className="pad v-3">
+                      <h2 className="t-h3">{t('q.services')}</h2>
+                      <div className="h-2 wrap" style={{ gap: 8 }}>
+                        {servicesOf(profile.category).map((sv) => {
+                          const on = profile.services.includes(sv.id);
+                          return (
+                            <button key={sv.id} className={`chip${on ? ' on' : ''}`} style={{ minHeight: 44 }}
+                              onClick={() => setProfile({
+                                ...profile,
+                                services: on
+                                  ? profile.services.filter((x) => x !== sv.id)
+                                  : [...profile.services, sv.id],
+                              })}>
+                              {sv.icon} {serviceName(sv.id, lang)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button className="btn" disabled={!profile.services.length}
+                        onClick={() => {
+                          say('me', profile.services.map((x) => serviceName(x, lang)).join(', '));
+                          next();
+                        }}>
+                        {t('c.next')}
+                      </button>
+                    </GlassCard>
+                  ) : null}
+
+                  {gap === 'languages' ? (
+                    <GlassCard className="pad v-3">
+                      <h2 className="t-h3">{t('q.languages')}</h2>
+                      <div className="h-2 wrap" style={{ gap: 8 }}>
+                        {LANGUAGES.map((l) => {
+                          const on = languages.includes(l.code);
+                          return (
+                            <button key={l.code} className={`chip${on ? ' on' : ''}`} style={{ minHeight: 44 }}
+                              onClick={() => setLanguages(on
+                                ? languages.filter((x) => x !== l.code)
+                                : [...languages, l.code])}>
+                              {l.native}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button className="btn" disabled={!languages.length}
+                        onClick={() => {
+                          say('me', languages.map((c) => LANGUAGES.find((l) => l.code === c)?.native).join(', '));
+                          next();
+                        }}>
+                        {t('c.next')}
+                      </button>
+                    </GlassCard>
+                  ) : null}
+                </>
+              );
+            })() : null}
+
             {step === 'where' ? (
               <>
                 <button className="btn ghost" onClick={() => navigator.geolocation?.getCurrentPosition(
                   (p) => setGeo(nearestArea(p.coords.latitude, p.coords.longitude)), () => {}, { timeout: 8000 })}>
                   📍 {t('c.search')}
                 </button>
-                <Stagger className="v-3" gap={0.04}>
-                  {AREAS.map((a) => (
-                    <StaggerItem key={a.areaName}>
-                      <button className={`choice${a.areaName === geo.areaName ? ' on' : ''}`} style={{ minHeight: 60 }}
-                        onClick={() => setGeo(a)}>
-                        <span className="lead" aria-hidden>📍</span>
-                        <span className="ttl">{a.areaName}</span>
-                        {a.areaName === geo.areaName ? <span className="mark">✓</span> : null}
+                {/* City first, then the area inside it. The old list was six
+                    Bengaluru localities, which quietly made this a Bengaluru
+                    product. */}
+                <div>
+                  <p className="label">{t('c.pickCity')}</p>
+                  <div className="h-2 wrap" style={{ gap: 8 }}>
+                    {CITIES.map((c) => (
+                      <button key={c.id} className={`chip${cityId === c.id ? ' on' : ''}`}
+                        style={{ minHeight: 46 }}
+                        onClick={() => {
+                          setCityId(c.id);
+                          setGeo(geoOf(c.localities[0].id)!);
+                        }}>
+                        {c.name}
                       </button>
-                    </StaggerItem>
-                  ))}
-                </Stagger>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="label">{t('c.pickArea')}</p>
+                  <Stagger className="v-3 grid-cards" gap={0.03}>
+                    {(city(cityId)?.localities ?? []).map((l) => (
+                      <StaggerItem key={l.id}>
+                        <button className={`choice${geo.localityId === l.id ? ' on' : ''}`} style={{ minHeight: 56 }}
+                          onClick={() => setGeo(geoOf(l.id)!)}>
+                          <span className="lead" aria-hidden>📍</span>
+                          <span className="ttl">{l.name}</span>
+                          {geo.localityId === l.id ? <span className="mark">✓</span> : null}
+                        </button>
+                      </StaggerItem>
+                    ))}
+                  </Stagger>
+                </div>
                 <div>
                   <p className="label">{t('o.radius')}</p>
-                  <div className="grid-3">
-                    {[2, 5, 10].map((r) => (
+                  <div className="grid-2">
+                    {[2, 5, 10, 15].map((r) => (
                       <button key={r} className={`chip${radiusKm === r ? ' on' : ''}`}
                         style={{ minHeight: 54, justifyContent: 'center', fontSize: 16 }} onClick={() => setRadiusKm(r)}>
                         {r} {t('c.km')}
