@@ -112,6 +112,7 @@ export function WorkerPanel({ worker }: { worker: Worker }) {
           <span className="t-xs">{t('w.reviews')}</span>
           <Stars value={worker.rating} count={worker.reviewCount} />
         </div>
+        <Link href="/earnings" className="btn sm ghost">📊 {t('e.title')} →</Link>
       </Panel>
 
       <Panel title={t('d.strength')} icon="📈">

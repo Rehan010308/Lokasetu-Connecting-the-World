@@ -18,6 +18,7 @@ export function navWorker(t: T): DockItem[] {
   return [
     { href: '/', icon: '🔎', label: t('n.home') },
     { href: '/jobs', icon: '🧰', label: t('n.jobs') },
+    { href: '/earnings', icon: '💰', label: t('e.title') },
     { href: '/me', icon: '👤', label: t('n.profile') },
   ];
 }

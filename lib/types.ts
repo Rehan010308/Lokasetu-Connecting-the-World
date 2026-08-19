@@ -150,7 +150,22 @@ export interface Client {
   /** flats in the society, or staff in the business */
   size?: number;
   emergencyContact?: string;
+  /** home, office, mother's place — the addresses they book to repeatedly */
+  savedPlaces?: SavedPlace[];
+  /** what they usually pay with; only ever a method id, never card data */
+  preferredPayment?: PaymentMethod;
   createdAt: number;
+}
+
+/**
+ * A place someone books to often.
+ * Stores a label and a location — never anything that identifies a household
+ * beyond the address the customer typed themselves.
+ */
+export interface SavedPlace {
+  id: string;
+  label: string;
+  geo: Geo;
 }
 
 export interface Geo {

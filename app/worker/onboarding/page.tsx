@@ -331,7 +331,7 @@ export default function Onboarding() {
                       </div>
                       <button className="btn" disabled={years === null}
                         onClick={() => { say('me', `${years} ${t('c.years')}`); next(); }}>
-                        {t('c.next')}
+                        {t('c.continue')}
                       </button>
                       <button className="btn quiet" onClick={() => { setYears(null); say('me', t('q.notSure')); next(); }}>
                         {t('q.notSure')}
@@ -363,7 +363,7 @@ export default function Onboarding() {
                           say('me', profile.services.map((x) => serviceName(x, lang)).join(', '));
                           next();
                         }}>
-                        {t('c.next')}
+                        {t('c.continue')}
                       </button>
                     </GlassCard>
                   ) : null}
@@ -389,7 +389,7 @@ export default function Onboarding() {
                           say('me', languages.map((c) => LANGUAGES.find((l) => l.code === c)?.native).join(', '));
                           next();
                         }}>
-                        {t('c.next')}
+                        {t('c.continue')}
                       </button>
                     </GlassCard>
                   ) : null}

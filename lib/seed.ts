@@ -534,6 +534,73 @@ function buildJobs(now: number): Job[] {
   ];
 }
 
+/* ---------------------------------------------------- a year of work history
+
+   The earnings dashboard is only worth opening if there is something in it. The
+   demo worker's four hand-written completed jobs make every chart past "7 days"
+   a flat line, which demonstrates the opposite of what the screen is for.
+
+   So: a year of plausible history, generated deterministically. Real Indian
+   trade work is seasonal and uneven — a fan-repair electrician is busy through
+   summer and quiet in the monsoon — so the volume follows a curve rather than
+   a flat average, and the chart has a shape worth reading.
+------------------------------------------------------------------------------ */
+
+const HISTORY_TITLES = [
+  ['Ceiling fan not spinning', 'fan_repair', 320],
+  ['Fan regulator replaced', 'fan_repair', 380],
+  ['Switchboard replaced in kitchen', 'switchboard', 520],
+  ['New plug point behind the fridge', 'wiring', 460],
+  ['Tube light and starter changed', 'lighting', 260],
+  ['Inverter battery terminals cleaned', 'inverter', 700],
+  ['House wiring check after a short', 'wiring', 900],
+  ['Two switchboards, one socket', 'switchboard', 640],
+  ['Bedroom light point shifted', 'lighting', 410],
+  ['Inverter not charging', 'inverter', 850],
+] as const;
+
+/** Deterministic pseudo-random in [0,1) — same demo twice, always. */
+function rnd(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function buildHistory(now: number): Job[] {
+  const out: Job[] = [];
+  const clients = ['c_demo', 'c2', 's_demo'] as const;
+
+  /* walk back a year, day by day */
+  for (let d = 4; d < 360; d++) {
+    const r = rnd(d);
+    /* seasonal load: busiest in the hot months, quietest in the monsoon */
+    const month = new Date(now - d * day).getMonth();
+    const season = [0.5, 0.55, 0.75, 0.95, 1, 0.9, 0.45, 0.4, 0.5, 0.8, 0.7, 0.6][month];
+    if (r > 0.34 * season) continue;                 // most days have no job
+
+    const [title, serviceId, base] = HISTORY_TITLES[Math.floor(rnd(d * 3.1) * HISTORY_TITLES.length)];
+    const amount = Math.round(base * (0.85 + rnd(d * 7.7) * 0.5));
+    const clientId = clients[Math.floor(rnd(d * 2.3) * clients.length)];
+    const completedAt = now - d * day + Math.floor(rnd(d * 5.5) * 8 * hour);
+
+    out.push({
+      id: `h${d}`, clientId, clientRole: clientId === 's_demo' ? 'society' : 'customer',
+      title, rawRequest: title,
+      lang: 'en', category: 'electrical', serviceId,
+      urgency: 'flexible', estimatedHours: 1,
+      timePref: 'asap', duration: 'hr1', photos: [],
+      geo: at('blr_koramangala', `h${d}`),
+      priceMin: Math.round(amount * 0.85), priceMax: Math.round(amount * 1.2),
+      priceBasis: 'standard rate',
+      status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: amount,
+      payment: paid(amount, rnd(d * 9.1) > 0.3 ? 'upi' : 'cash', completedAt),
+      requestedAt: completedAt - 2 * day, acceptedAt: completedAt - 2 * day + hour,
+      completedAt,
+      createdAt: completedAt - 2 * day,
+    });
+  }
+  return out;
+}
+
 /* ------------------------------------------------- conversations in progress */
 
 function msg(
@@ -613,7 +680,7 @@ export function seedDB(): DB {
       ...x, verification: { ...x.verification }, services: [...x.services], languages: [...x.languages],
     })),
     clients: clients.map((x) => ({ ...x })),
-    jobs: buildJobs(now),
+    jobs: [...buildJobs(now), ...buildHistory(now)],
     quotes: buildQuotes(now),
     messages: buildMessages(now),
     reviews: reviews.map((x) => ({ ...x, tags: [...x.tags] })),

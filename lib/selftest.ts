@@ -21,6 +21,7 @@ import { cancelTerms, canCancel, travelFee, POLICY_ROWS } from './cancellation';
 import { telLink, waLink, navigateLink, sosMessage, e164, workerShareText } from './links';
 import { distanceKm, formatKm, formatDistance } from './geo';
 import { CITIES, ALL_LOCALITIES, geoOf } from './cities';
+import { RANGES, bucketsFor, compact, earnedJobs, lifetime, niceMax, summarise } from './earnings';
 import {
   DAY_KEYS, crossesMidnight, hoursPerWeek, isValidShift, monthlyCost,
   nextOccurrence, shiftHours, shiftSummary, totalHours, type ShiftPattern,
@@ -449,6 +450,60 @@ const en = (k: any) => t('en', k);
          const shown = rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]).length > 0;
          return !shown || !j.serviceId || w.services.includes(j.serviceId);
        })));
+  }
+
+  /* ================================================= 10g. EARNINGS DASHBOARD */
+  section('Earnings');
+  {
+    const NOW = new Date(2026, 7, 19, 14, 0, 0).getTime();
+    const wid = 'w_demo';
+
+    ok('only completed work counts as earnings',
+       earnedJobs(db.jobs, wid).every((j) => j.status === 'completed' && !!j.completedAt));
+    ok('another worker\'s jobs are never counted',
+       earnedJobs(db.jobs, wid).every((j) => j.assignedWorkerId === wid));
+
+    const life = lifetime(db.jobs, wid);
+    const yr = summarise(db.jobs, wid, 'y1', Date.now());
+    ok('a year never exceeds the lifetime total', yr.total <= life.total, `${yr.total} <= ${life.total}`);
+
+    const d7 = summarise(db.jobs, wid, 'd7', Date.now());
+    const d30 = summarise(db.jobs, wid, 'd30', Date.now());
+    ok('a longer window earns at least as much', d30.total >= d7.total, `30d ${d30.total} >= 7d ${d7.total}`);
+    ok('the buckets add up to the total',
+       d30.buckets.reduce((s2, b) => s2 + b.amount, 0) === d30.total);
+
+    ok('an average with no jobs is zero, never NaN', (() => {
+      const none = summarise([], 'nobody', 'd30', NOW);
+      return none.average === 0 && none.total === 0 && !Number.isNaN(none.average);
+    })());
+
+    /* bucket counts are what keep the chart readable */
+    ok('a week draws 7 bars', bucketsFor('d7', NOW).length === 7);
+    ok('30 days draws 30 bars', bucketsFor('d30', NOW).length === 30);
+    ok('90 days is drawn weekly, not as 90 bars', bucketsFor('d90', NOW).length === 13);
+    ok('a year draws 12 months', bucketsFor('y1', NOW).length === 12);
+    ok('lifetime is capped so it cannot draw hundreds of bars',
+       bucketsFor('all', NOW, new Date(2015, 0, 1).getTime()).length <= 24);
+
+    ok('buckets never overlap', (() => {
+      const b = bucketsFor('d7', NOW);
+      return b.every((x, i) => i === 0 || x.from >= b[i - 1].to);
+    })());
+    ok('buckets are in time order', (() => {
+      const b = bucketsFor('m6', NOW);
+      return b.every((x, i) => i === 0 || x.from > b[i - 1].from);
+    })());
+
+    ok('axis ceilings are round numbers', niceMax(937) === 1000 && niceMax(1874) === 2000,
+       `${niceMax(937)}, ${niceMax(1874)}`);
+    ok('an empty chart still has a scale', niceMax(0) === 100);
+    ok('big money compacts', compact(12400) === '12K' && compact(250000) === '2.5L',
+       `${compact(12400)} / ${compact(250000)}`);
+    ok('small money does not compact', compact(840) === '840');
+
+    ok('every range has a label in every language',
+       LANGUAGES.every((l) => RANGES.every((r) => !!t(l.code, r.key as any))));
   }
 
   /* ==================================================== 11. PAYMENTS */

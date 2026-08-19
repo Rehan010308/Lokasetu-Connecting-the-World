@@ -1021,6 +1021,18 @@ select.input option { background: var(--canvas-2); color: var(--ink); }
 
 .price { font-size: 30px; font-weight: 820; letter-spacing: -.045em; color: var(--ink); }
 
+/* The one number a screen leads with. Exactly one per view, same sans as
+   everything else — a display face here reads as decoration, not data. */
+.hero {
+  font-size: 48px;
+  font-weight: 820;
+  letter-spacing: -.05em;
+  line-height: 1.05;
+  color: var(--ink);
+  margin-top: 2px;
+}
+@media (min-width: 1024px) { .hero { font-size: 56px; } }
+
 .empty { text-align: center; padding: 56px 24px; color: var(--ink-3); }
 .empty .big { font-size: 46px; display: block; margin-bottom: 12px; opacity: .8; }
 
@@ -1117,6 +1129,120 @@ select.input option { background: var(--canvas-2); color: var(--ink); }
   .hub-actions { grid-template-columns: repeat(3, 1fr); }
   .hub-actions > :first-child { grid-column: auto; }
 }
+
+/* ------------------------------------------------------------- 15a3. CHART */
+
+.chart { position: relative; width: 100%; }
+
+/* Recessive: hairline, solid, one step off the surface. Never dashed. */
+.chart-grid {
+  position: absolute;
+  left: 34px; right: 0;
+  border-top: 1px solid var(--hairline-2);
+  pointer-events: none;
+}
+.chart-tick {
+  position: absolute;
+  left: -34px;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-bars {
+  position: absolute;
+  inset: 0 0 0 34px;
+  display: flex;
+  align-items: flex-end;
+  /* the 2px surface gap between neighbours — separation by air, not by stroke */
+  gap: 2px;
+}
+.chart-slot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: default;
+  outline: none;
+}
+.chart-slot:focus-visible { outline: 2px solid var(--em-500); outline-offset: 2px; border-radius: 6px; }
+
+.chart-bar {
+  width: 100%;
+  /* validated against both surfaces — the same step in light and dark */
+  background: #059669;
+  border-radius: 4px 4px 0 0;   /* rounded cap, square at the baseline */
+  transition: opacity var(--t-micro) var(--e-out);
+  min-height: 2px;
+}
+.chart-slot:hover .chart-bar, .chart-bar.hot { opacity: .78; }
+
+.chart-peak {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 5px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tip {
+  position: absolute;
+  bottom: calc(100% + 22px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 11px;
+  border-radius: var(--r-sm);
+  background: var(--glass-2);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--lift-2);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  white-space: nowrap;
+  pointer-events: none;
+}
+.chart-tip b { font-size: 14px; color: var(--ink); }
+.chart-tip span { font-size: 11.5px; color: var(--ink-3); }
+
+.chart-axis {
+  display: flex;
+  gap: 2px;
+  margin-left: 34px;
+  margin-top: 6px;
+}
+.chart-xlabel {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* the list view, for anyone the chart does not serve */
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-3);
+  padding: 0 0 8px;
+  font-weight: 700;
+}
+table.data th:not(:first-child), table.data td:not(:first-child) { text-align: right; }
+table.data td { padding: 9px 0; border-top: 1px solid var(--hairline-2); color: var(--ink-2); }
 
 /* ------------------------------------------------------------------ 15b. MAP */
 
@@ -1672,6 +1798,10 @@ label.lbl { display: block; font-size: 13.5px; font-weight: 700; color: var(--in
 @media (max-width: 1023px) {
   .rail-r, .dock-brand { display: none !important; }
 }
+
+/* Content the right-hand panel already carries on a desktop. Shown on a phone,
+   where there is no panel; hidden above 1024 so it is never said twice. */
+@media (min-width: 1024px) { .desk-hide { display: none !important; } }
 
 /* A landscape phone is short, not wide: keep the dock off the content. */
 @media (max-height: 520px) and (max-width: 1023px) {
