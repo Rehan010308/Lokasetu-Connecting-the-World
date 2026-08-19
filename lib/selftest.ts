@@ -7,6 +7,7 @@
  * mixed-language UI, and workers appearing under the wrong category.
  */
 // @ts-nocheck
+import { readFileSync } from 'node:fs';
 import { seedDB, DEMO_ACCOUNTS } from './seed';
 import { ALL_KEYS, DICTS, LANGUAGES, t, makeT } from './i18n';
 import { CATEGORIES, SERVICES, matchServices, servicesOf, service, categoryOfService } from './catalog';
@@ -424,6 +425,22 @@ const en = (k: any) => t('en', k);
        hits.every((m) => m.geo?.cityId === undefined || m.worker.geo.cityId === 'blr'),
        `${hits.length} hits, all Bengaluru`);
     ok('a city search actually finds somebody', hits.length > 0, `${hits.length}`);
+  }
+
+  /* ============================= 10e2. A CUSTOMER CHOOSES THEIR OWN CITY */
+  {
+    /* THE BUG: loginClient() fell back to a hardcoded Koramangala, so a
+       customer signing up in Mumbai was placed in Bengaluru and shown workers
+       800km away. The signature now carries a geo. */
+    const src = readFileSync(new URL('../components/store.tsx', import.meta.url), 'utf8');
+    ok('signup accepts a location',
+       /loginClient\([^)]*geo\?: Geo/.test(src));
+    ok('no hardcoded Koramangala fallback remains in signup',
+       !src.includes("areaName: 'Koramangala, Bengaluru'"));
+
+    /* and every city must be reachable from the picker, not just present in data */
+    const picker = readFileSync(new URL('../components/city.tsx', import.meta.url), 'utf8');
+    ok('the picker offers every city, not a subset', picker.includes('CITIES.map'));
   }
 
   /* ================== 10f. TRADE MATCHING — an electrician sees electrical work */

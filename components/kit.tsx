@@ -50,9 +50,13 @@ export function Panel({
 }
 
 export function TopBar({
-  title, subtitle, back, right, glassy,
+  title, subtitle, subtitleNode, back, right, glassy,
 }: {
-  title?: string; subtitle?: string; back?: boolean | string;
+  title?: string;
+  subtitle?: string;
+  /** a subtitle with controls in it — the city switcher, for instance */
+  subtitleNode?: React.ReactNode;
+  back?: boolean | string;
   right?: React.ReactNode; glassy?: boolean;
 }) {
   const router = useRouter();
@@ -65,7 +69,7 @@ export function TopBar({
       ) : <div className="mark" aria-hidden>क</div>}
       <div className="grow" style={{ minWidth: 0 }}>
         {title ? <h1 className="t-h3" style={ellipsis}>{title}</h1> : null}
-        {subtitle ? <p className="t-xs" style={ellipsis}>{subtitle}</p> : null}
+        {subtitleNode ?? (subtitle ? <p className="t-xs" style={ellipsis}>{subtitle}</p> : null)}
       </div>
       {right}
     </header>

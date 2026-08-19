@@ -3,11 +3,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type {
   Cancellation, Client, DB, Job, JobStatus, LangCode, Message, MessageKind,
-  Payment, PaymentMethod, Review, Role, SosEvent, Verification, Worker,
+  Geo, Payment, PaymentMethod, Review, Role, SosEvent, Verification, Worker,
 } from '@/lib/types';
 import { EMPTY_PAYMENT, amountFor } from '@/lib/payments';
 import { cancelTerms, type CancelActor } from '@/lib/cancellation';
 import { seedDB, DEMO_ACCOUNTS } from '@/lib/seed';
+import { geoOf } from '@/lib/cities';
 import { makeT, type TKey } from '@/lib/i18n';
 
 const STORAGE_KEY = 'kaamsetu:v2';
@@ -128,12 +129,12 @@ export function useActions() {
       return acc.id;
     },
 
-    loginClient(role: Exclude<Role, 'worker'>, phone: string, lang: LangCode, name: string, orgName?: string): string {
+    loginClient(role: Exclude<Role, 'worker'>, phone: string, lang: LangCode, name: string, orgName?: string, geo?: Geo): string {
       const existing = db.clients.find((c) => c.phone === phone);
       if (existing) {
         update((d) => ({
           ...d,
-          clients: d.clients.map((c) => (c.id === existing.id ? { ...c, lang } : c)),
+          clients: d.clients.map((c) => (c.id === existing.id ? { ...c, lang, ...(geo ? { geo } : {}) } : c)),
           session: { role: existing.role, id: existing.id, lang },
         }));
         return existing.id;
@@ -142,7 +143,9 @@ export function useActions() {
       const client: Client = {
         id, role, name: name.trim() || 'User', phone, lang,
         orgName: orgName?.trim() || undefined,
-        geo: db.clients[0]?.geo ?? { lat: 12.9352, lng: 77.6245, areaName: 'Koramangala, Bengaluru' },
+        /* Where they said they are. Falling back to a hardcoded Koramangala
+           put every new customer in Bengaluru — including the ones in Mumbai. */
+        geo: geo ?? db.clients[0]?.geo ?? geoOf('blr_koramangala')!,
         createdAt: Date.now(),
       };
       update((d) => ({ ...d, clients: [...d.clients, client], session: { role, id, lang } }));

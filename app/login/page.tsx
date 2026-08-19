@@ -7,6 +7,10 @@ import type { Role } from '@/lib/types';
 import { useActions, useT } from '@/components/store';
 import { GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
 import { HeaderTools, PhoneOtp, Shell, TopBar } from '@/components/kit';
+import { VERSION } from '@/lib/version';
+import { CityPicker } from '@/components/city';
+import { geoOf } from '@/lib/cities';
+import type { Geo } from '@/lib/types';
 
 const ROLES = [
   { role: 'worker'   as Role, icon: '🧰', title: 'a.worker'   as const, desc: 'a.workerD'   as const, demo: 'a.demoWorker'   as const },
@@ -20,6 +24,7 @@ export default function Login() {
   const { t, lang } = useT();
   const { setLang, loginDemo, loginClient } = useActions();
   const [role, setRole] = React.useState<Role | null>(null);
+  const [geo, setGeo] = React.useState<Geo | null>(geoOf('blr_koramangala') ?? null);
 
   return (
     <Shell>
@@ -88,19 +93,31 @@ export default function Login() {
                 <button className="btn" onClick={() => router.push('/worker/onboarding')}>{t('c.continue')} →</button>
               </GlassCard>
             ) : (
-              <GlassCard className="pad">
-                <PhoneOtp
-                  askName
-                  askOrg={role === 'society' || role === 'business'}
-                  onVerified={(phone, name, orgName) => {
-                    loginClient(role as Exclude<Role, 'worker'>, phone, lang, name, orgName);
-                    router.push('/');
-                  }}
-                />
-              </GlassCard>
+              <>
+                {/* Where you are decides which workers exist for you, so it is
+                    asked before the account is made rather than assumed to be
+                    Bengaluru — which is what the old build did to everyone. */}
+                <GlassCard className="pad v-3">
+                  <h2 className="t-h3">📍 {t('c.pickCity')}</h2>
+                  <CityPicker value={geo} onChange={setGeo} compact />
+                  {geo ? <p className="note em">📍 {geo.areaName}</p> : null}
+                </GlassCard>
+
+                <GlassCard className="pad">
+                  <PhoneOtp
+                    askName
+                    askOrg={role === 'society' || role === 'business'}
+                    onVerified={(phone, name, orgName) => {
+                      loginClient(role as Exclude<Role, 'worker'>, phone, lang, name, orgName, geo ?? undefined);
+                      router.push('/');
+                    }}
+                  />
+                </GlassCard>
+              </>
             )}
           </>
         )}
+        <p className="t-micro mid" style={{ opacity: .7, marginTop: 8 }}>v{VERSION}</p>
       </main>
     </Shell>
   );

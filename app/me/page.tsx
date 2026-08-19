@@ -10,6 +10,7 @@ import { servicesOf } from '@/lib/catalog';
 import { telLink } from '@/lib/links';
 import type { Availability } from '@/lib/types';
 import { PAYMENT_METHODS } from '@/lib/payments';
+import { BUILD, VERSION } from '@/lib/version';
 import { useActions, useMe, useStore, useT } from '@/components/store';
 import { Dock, GlassCard, Reveal } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
@@ -261,6 +262,12 @@ export default function MePage() {
 
         <button className="btn ghost" onClick={() => { logout(); router.push('/login'); }}>{t('c.logout')}</button>
         <button className="btn quiet" onClick={() => { reset(); router.push('/login'); }}>♻️ Reset demo data</button>
+
+        {/* Build stamp. Small, but it ends the "which version is this?"
+            question that cost an afternoon. */}
+        <p className="t-micro mid" style={{ opacity: .75 }}>
+          KaamSetu v{VERSION} · {BUILD}
+        </p>
       </main>
       <Dock items={isWorker ? navWorker(t) : navNormal(t)} />
     </Shell>

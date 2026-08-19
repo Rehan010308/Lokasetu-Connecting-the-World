@@ -1109,6 +1109,31 @@ select.input option { background: var(--canvas-2); color: var(--ink); }
 .scroll-x::-webkit-scrollbar { display: none; }
 .scroll-x > * { scroll-snap-align: start; flex: none; }
 
+/* ------------------------------------------------------------- 15a1. CITY */
+
+.city-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px 3px 6px;
+  margin-left: -6px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--t-micro) var(--e-out), color var(--t-micro) var(--e-out);
+}
+.city-btn .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.city-btn .cv { font-size: 10px; opacity: .7; }
+@media (hover: hover) {
+  .city-btn:hover { background: var(--hairline-2); color: var(--ink-2); }
+}
+
 /* ---------------------------------------------------------- 15a2. CONTACT HUB */
 
 .hub-who { display: flex; align-items: center; gap: 15px; }

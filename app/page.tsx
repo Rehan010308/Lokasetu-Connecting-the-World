@@ -8,12 +8,13 @@ import { categoryName, serviceName } from '@/lib/i18n-catalog';
 import { matchServices } from '@/lib/catalog';
 import { rankWorkers, etaMinutes } from '@/lib/ai/match';
 import { formatDistance } from '@/lib/geo';
-import { useMe, useStore, useT } from '@/components/store';
+import { useActions, useMe, useStore, useT } from '@/components/store';
 import { useSpeech } from '@/components/kit';
 import { Dock, GlassCard, Magnetic, PullToRefresh, Reveal, Stagger, StaggerItem, VoiceOrb } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
 import { navNormal, navWorker } from '@/components/nav';
 import { ClientPanel, WorkerPanel } from '@/components/panels';
+import { CityButton } from '@/components/city';
 
 /** Statuses that mean the job is over, one way or another. */
 const DEAD_STATUSES: string[] = ['completed', 'cancelled_by_client', 'cancelled_by_worker', 'expired'];
@@ -48,6 +49,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
   const { db, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
+  const { updateClient } = useActions();
 
   const myJobs = db.jobs
     .filter((j) => j.clientId === me.id && !DEAD_STATUSES.includes(j.status))
@@ -69,7 +71,16 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
 
   return (
     <Shell aside={<ClientPanel />}>
-      <TopBar title={me.name} subtitle={`${orgLine}📍 ${me.geo.areaName.split(',')[0]}`} right={<HeaderTools />} />
+      <TopBar
+        title={me.name}
+        subtitleNode={
+          <span className="h-2" style={{ gap: 6, minWidth: 0 }}>
+            {orgLine ? <span className="t-xs">{orgLine}</span> : null}
+            <CityButton geo={me.geo} onChange={(g) => me.client && updateClient(me.client.id, { geo: g })} />
+          </span>
+        }
+        right={<HeaderTools />}
+      />
       <PullToRefresh onRefresh={refresh}>
       <main className="page v-6" style={{ paddingTop: 4 }}>
 
@@ -203,6 +214,7 @@ function WorkerHome() {
   const { db, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
+  const { updateWorker } = useActions();
   const w = me.worker!;
 
   const [q, setQ] = React.useState('');
@@ -242,7 +254,16 @@ function WorkerHome() {
 
   return (
     <Shell aside={<WorkerPanel worker={w} />}>
-      <TopBar title={w.name} subtitle={`📍 ${w.geo.areaName} · ${w.radiusKm} ${t('c.km')}`} right={<HeaderTools />} />
+      <TopBar
+        title={w.name}
+        subtitleNode={
+          <span className="h-2" style={{ gap: 6, minWidth: 0 }}>
+            <CityButton geo={w.geo} onChange={(g) => updateWorker(w.id, { geo: g })} />
+            <span className="t-xs">· {w.radiusKm} {t('c.km')}</span>
+          </span>
+        }
+        right={<HeaderTools />}
+      />
       <PullToRefresh onRefresh={refresh}>
       <main className="page v-4" style={{ paddingTop: 4 }}>
 
