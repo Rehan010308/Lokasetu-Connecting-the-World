@@ -1,21 +1,28 @@
-# KaamSetu — AI-powered hyperlocal employment platform
+# LokaSetu — AI-powered hyperlocal employment platform
 
-> काम सेतु — "the work bridge". Connects India's informal workforce
+> लोक सेतु — "the bridge of people". Connects India's informal workforce
 > (electricians, plumbers, carpenters, painters, house help, cooks, barbers,
 > raddiwalas, shop assistants) with residents in the same neighbourhood —
-> by **voice**, in **six languages**, with **no forms to fill**.
+> by **voice**, in **ten languages**, with **no forms to fill**.
 
-**Phase 1 (this repo): the complete product, working end to end, with the AI
-layer stubbed behind clean interfaces. Phase 2: swap the stubs for real Claude
-calls — no UI code changes.**
+**Current build: v4.1** — 12 cities, dedicated desktop layouts, live tracking,
+recurring shifts, an earnings dashboard, and a Trust & Safety centre.
 
-**V2 is a rebuild.** Four user types, ten languages with compile-enforced
-completeness, a two-level category system, Aadhaar verification, SOS, and
-WhatsApp / Maps / calling integration. See **[V2.md](./V2.md)** for the
-architecture, schema, integrations and full bug audit, and
-**[DESIGN.md](./DESIGN.md)** for the Aurora design system.
+```bash
+npm install
+npm run dev      # http://localhost:3000
+npm test         # 204 assertions
+npm run doctor   # detect leftover files from an older unzip
+```
 
----
+**Demo accounts** — OTP is always `123456`:
+
+| Role | Phone |
+|---|---|
+| Worker | 9000000001 |
+| Customer | 9000000002 |
+| Society | 9000000003 |
+| Business | 9000000004 |
 
 ## Run it
 

@@ -4,7 +4,7 @@ import React from 'react';
 
 type Mode = 'light' | 'dark' | 'system';
 
-const KEY = 'kaamsetu:theme';
+const KEY = 'lokasetu:theme';
 const Ctx = React.createContext<{ mode: Mode; resolved: 'light' | 'dark'; setMode: (m: Mode) => void }>({
   mode: 'system', resolved: 'light', setMode: () => {},
 });

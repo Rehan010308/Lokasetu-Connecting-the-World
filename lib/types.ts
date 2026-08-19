@@ -1,5 +1,5 @@
 /* ===========================================================================
-   KaamSetu V2 domain model.
+   LokaSetu V2 domain model.
    These interfaces are the database schema. When you move off localStorage,
    each one becomes a table with the same columns.
    =========================================================================== */

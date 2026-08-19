@@ -4,9 +4,9 @@ import { StoreProvider } from '@/components/store';
 import { ThemeProvider } from '@/components/theme';
 
 export const metadata: Metadata = {
-  title: 'KaamSetu — hyperlocal work, in your language',
+  title: 'LokaSetu — hyperlocal work, in your language',
   description:
-    'KaamSetu connects electricians, plumbers, cooks, house help, barbers, painters, carpenters and scrap collectors with residents in their own neighbourhood — by voice, in six languages.',
+    'LokaSetu connects electricians, plumbers, cooks, house help, barbers, painters, carpenters and scrap collectors with residents in their own neighbourhood — by voice, in six languages.',
 };
 
 export const viewport: Viewport = {
@@ -21,7 +21,7 @@ export const viewport: Viewport = {
 };
 
 /* Sets the theme before first paint so there is no white flash on a dark phone. */
-const NO_FLASH = `(function(){try{var m=localStorage.getItem('kaamsetu:theme')||'system';
+const NO_FLASH = `(function(){try{var m=localStorage.getItem('lokasetu:theme')||'system';
 var d=m==='dark'||(m==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
 document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){}})();`;
 

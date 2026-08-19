@@ -2,7 +2,7 @@
 
 /* ===========================================================================
    AURORA COMPONENT LIBRARY
-   Motion primitives + surfaces for KaamSetu.
+   Motion primitives + surfaces for LokaSetu.
 
    Motion contract (every animation in the app obeys these):
      • transform + opacity only — never width/height/top/left
@@ -396,10 +396,10 @@ export function Dock({ items }: { items: DockItem[] }) {
     <nav className="dock no-print" aria-label="Main">
       {/* Rail header. CSS hides it below 1024px, where the dock is a pill. */}
       <div className="dock-brand">
-        <span className="mark" aria-hidden>क</span>
+        <span className="mark" aria-hidden>लो</span>
         <span>
-          <span className="nm">KaamSetu</span><br />
-          <span className="sb">काम का पुल</span>
+          <span className="nm">LokaSetu</span><br />
+          <span className="sb">लोगों का पुल</span>
         </span>
       </div>
       {items.map((it) => {

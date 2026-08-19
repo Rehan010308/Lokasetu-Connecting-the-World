@@ -11,7 +11,7 @@ import { seedDB, DEMO_ACCOUNTS } from '@/lib/seed';
 import { geoOf } from '@/lib/cities';
 import { makeT, type TKey } from '@/lib/i18n';
 
-const STORAGE_KEY = 'kaamsetu:v2';
+const STORAGE_KEY = 'lokasetu:v2';
 
 /**
  * Phase 1 persistence: the browser.

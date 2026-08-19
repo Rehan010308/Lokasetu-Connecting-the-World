@@ -1,4 +1,4 @@
-# Aurora — the KaamSetu design system
+# Aurora — the LokaSetu design system
 
 > A layered-glass, gradient-mesh visual language for a marketplace that has to
 > read as *premium* to a customer and as *obvious* to a worker holding a ₹6,000

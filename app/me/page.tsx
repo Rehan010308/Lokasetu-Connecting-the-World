@@ -244,7 +244,7 @@ export default function MePage() {
           </div>
         </GlassCard>
 
-        <a href="https://wa.me/919000000000?text=KaamSetu%20help" target="_blank" rel="noopener noreferrer"
+        <a href="https://wa.me/919000000000?text=LokaSetu%20help" target="_blank" rel="noopener noreferrer"
            className="choice" style={{ minHeight: 66 }}>
           <span className="lead" aria-hidden>🛟</span>
           <span><span className="ttl">{t('pr.help')}</span><br /><span className="sub">{t('ts.support')}</span></span>
@@ -266,7 +266,7 @@ export default function MePage() {
         {/* Build stamp. Small, but it ends the "which version is this?"
             question that cost an afternoon. */}
         <p className="t-micro mid" style={{ opacity: .75 }}>
-          KaamSetu v{VERSION} · {BUILD}
+          LokaSetu v{VERSION} · {BUILD}
         </p>
       </main>
       <Dock items={isWorker ? navWorker(t) : navNormal(t)} />

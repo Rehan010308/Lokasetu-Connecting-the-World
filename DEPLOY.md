@@ -1,4 +1,4 @@
-# Getting KaamSetu online
+# Getting LokaSetu online
 
 Two steps: **GitHub** (stores the code), then **Vercel** (runs it on a real
 URL). Total time: about 10 minutes the first time.
@@ -8,7 +8,7 @@ URL). Total time: about 10 minutes the first time.
 ## 0. Run it on your machine first
 
 ```bash
-cd kaamsetu
+cd lokasetu
 npm install
 npm run dev
 ```
@@ -24,17 +24,17 @@ Open http://localhost:3000. If that works, deployment will work.
 ### Option A — GitHub website (no CLI needed)
 
 1. Go to https://github.com/new
-2. Repository name: `kaamsetu` · Private or Public · **do not** tick
+2. Repository name: `lokasetu` · Private or Public · **do not** tick
    "Add a README" (the project already has one) · **Create repository**.
 3. GitHub shows you a page with commands. In your terminal, inside the
-   `kaamsetu` folder, run:
+   `lokasetu` folder, run:
 
 ```bash
 git init
 git add .
-git commit -m "KaamSetu: hyperlocal employment platform (phase 1)"
+git commit -m "LokaSetu: hyperlocal employment platform (phase 1)"
 git branch -M main
-git remote add origin https://github.com/<your-username>/kaamsetu.git
+git remote add origin https://github.com/<your-username>/lokasetu.git
 git push -u origin main
 ```
 
@@ -47,7 +47,7 @@ paste it as the password.
 
 ```bash
 gh auth login          # once
-gh repo create kaamsetu --private --source=. --remote=origin --push
+gh repo create lokasetu --private --source=. --remote=origin --push
 ```
 
 ### Pushing later changes
@@ -66,7 +66,7 @@ git push
 
 1. Go to https://vercel.com and sign in **with GitHub**.
 2. **Add New → Project**.
-3. Find `kaamsetu` in the list → **Import**.
+3. Find `lokasetu` in the list → **Import**.
 4. Vercel auto-detects Next.js. Leave every setting at its default:
    - Framework Preset: **Next.js**
    - Build Command: `next build` (default)
@@ -74,7 +74,7 @@ git push
    - Install Command: `npm install` (default)
    - Environment Variables: **none needed for phase 1**
 5. **Deploy**. About 90 seconds later you get a live URL like
-   `https://kaamsetu.vercel.app`.
+   `https://lokasetu.vercel.app`.
 
 From then on, **every `git push` to `main` redeploys automatically**, and every
 pull request gets its own preview URL.

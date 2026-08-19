@@ -53,13 +53,13 @@ export function workerShareText(w: Worker, origin: string, serviceLabel: string)
     `📞 +${e164(w.phone)}`,
     `${origin}/worker/${w.id}`,
     '',
-    'Found on KaamSetu',
+    'Found on LokaSetu',
   ].filter(Boolean).join('\n');
 }
 
 /** A job request, shared to a worker or a neighbour. */
 export function jobShareText(title: string, area: string, origin: string, jobId: string): string {
-  return [`Need help: ${title}`, `📍 ${area}`, `${origin}/job/${jobId}`, '', 'Posted on KaamSetu'].join('\n');
+  return [`Need help: ${title}`, `📍 ${area}`, `${origin}/job/${jobId}`, '', 'Posted on LokaSetu'].join('\n');
 }
 
 /* --------------------------------------------------------------------- maps */
@@ -108,7 +108,7 @@ export function sosMessage(name: string, lat?: number, lng?: number, context?: s
     `🆘 ${name} needs help.`,
     context ? `While: ${context}` : '',
     lat != null && lng != null ? `Location: ${locationText(lat, lng)}` : 'Location not available.',
-    `Sent from KaamSetu`,
+    `Sent from LokaSetu`,
   ];
   return lines.filter(Boolean).join('\n');
 }

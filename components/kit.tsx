@@ -66,7 +66,7 @@ export function TopBar({
       {back ? (
         <button className="icon-btn" aria-label={t('c.back')}
           onClick={() => (typeof back === 'string' ? router.push(back) : router.back())}>←</button>
-      ) : <div className="mark" aria-hidden>क</div>}
+      ) : <div className="mark" aria-hidden>लो</div>}
       <div className="grow" style={{ minWidth: 0 }}>
         {title ? <h1 className="t-h3" style={ellipsis}>{title}</h1> : null}
         {subtitleNode ?? (subtitle ? <p className="t-xs" style={ellipsis}>{subtitle}</p> : null)}

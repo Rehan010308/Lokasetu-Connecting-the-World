@@ -27,7 +27,7 @@ export const LANGUAGES: { code: LangCode; label: string; native: string; speech:
 
 const en = {
   /* app */
-  'app.name': 'KaamSetu',
+  'app.name': 'LokaSetu',
   'app.tagline': 'Trusted local workers, near you',
 
   /* common */
@@ -134,7 +134,7 @@ const en = {
   'v.title': 'Verify your Aadhaar',
   'v.sub': 'Verified workers get up to 3 times more jobs. It takes one minute.',
   'v.ph': '12 digit Aadhaar number',
-  'v.consent': 'I agree to KaamSetu checking my Aadhaar for identity verification only.',
+  'v.consent': 'I agree to LokaSetu checking my Aadhaar for identity verification only.',
   'v.now': 'Verify now',
   'v.later': 'Do this later',
   'v.checking': 'Checking with UIDAI…',

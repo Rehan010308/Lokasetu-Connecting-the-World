@@ -528,7 +528,7 @@ function SosSheet({ open, onClose, jobId, context }: { open: boolean; onClose: (
     setSent(true);
   }
 
-  const msg = sosMessage(me.name || 'A KaamSetu user', coords?.lat, coords?.lng, context);
+  const msg = sosMessage(me.name || 'A LokaSetu user', coords?.lat, coords?.lng, context);
 
   return (
     <Sheet open={open} onClose={onClose} title={t('x.title')}>

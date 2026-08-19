@@ -1,8 +1,8 @@
 {
-  "name": "kaamsetu",
+  "name": "lokasetu",
   "version": "0.1.0",
   "private": true,
-  "description": "KaamSetu - AI-powered hyperlocal employment platform for India's informal workforce",
+  "description": "LokaSetu - AI-powered hyperlocal employment platform for India's informal workforce",
   "scripts": {
     "dev": "node scripts/doctor.mjs --warn && next dev",
     "build": "next build",
