@@ -4,11 +4,13 @@
   "private": true,
   "description": "KaamSetu - AI-powered hyperlocal employment platform for India's informal workforce",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/doctor.mjs && next dev",
     "build": "next build",
     "start": "next start",
     "test": "tsx lib/selftest.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "doctor": "node scripts/doctor.mjs",
+    "doctor:fix": "node scripts/doctor.mjs --fix"
   },
   "dependencies": {
     "next": "15.1.9",

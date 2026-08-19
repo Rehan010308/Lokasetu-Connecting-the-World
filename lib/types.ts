@@ -16,18 +16,63 @@ export type Role = 'worker' | 'customer' | 'society' | 'business';
 export type Availability = 'today' | 'weekdays' | 'anytime';
 export type Urgency = 'emergency' | 'today' | 'this_week' | 'flexible';
 
+/**
+ * The booking lifecycle.
+ * A customer REQUESTS a booking; a worker ACCEPTS it. Nobody is "hired" by a
+ * button press before the worker knows the scope, the time and the address.
+ */
 export type JobStatus =
-  | 'draft'        // being composed, AI still asking follow-ups
-  | 'open'         // published, waiting for workers
-  | 'assigned'     // a worker accepted
-  | 'on_the_way'   // worker travelling — this is when SOS and tracking matter
-  | 'working'      // worker on site
-  | 'worker_done'  // worker says finished, awaiting client confirmation
+  | 'draft'         // being composed in the booking flow
+  | 'requested'     // sent to suitable workers, awaiting acceptance
+  | 'accepted'      // a worker took it — confirmation page is live
+  | 'on_the_way'    // worker travelling; tracking and SOS matter from here
+  | 'working'       // worker on site
+  | 'worker_done'   // worker says finished, awaiting customer confirmation
   | 'completed'
-  | 'cancelled';
+  | 'cancelled_by_client'
+  | 'cancelled_by_worker'
+  | 'expired';      // nobody accepted in time
 
-export type PaymentMethod = 'upi' | 'gpay' | 'phonepe' | 'paytm' | 'cash';
-export type PaymentStatus = 'pending' | 'paid';
+/** When the customer wants the worker. */
+export type TimePreference = 'asap' | 'today' | 'tomorrow' | 'scheduled';
+
+/** What the AI estimates the job will take. Shown before anyone commits. */
+export type DurationEstimate = 'min30' | 'hr1' | 'hr2' | 'halfday' | 'fullday';
+
+export type PaymentMethod =
+  | 'upi' | 'gpay' | 'phonepe' | 'paytm' | 'card_debit' | 'card_credit' | 'cash';
+
+/**
+ * Payment states mirror a real gateway, so swapping the stub for Razorpay is a
+ * change of implementation, not of model.
+ *   unpaid      nothing collected yet
+ *   authorized  customer approved; money reserved, not moved
+ *   held        collected and held by the platform until the job is confirmed
+ *   released    paid out to the worker
+ *   refunded    returned to the customer
+ */
+export type PaymentStatus = 'unpaid' | 'authorized' | 'held' | 'released' | 'refunded';
+
+export interface Payment {
+  method?: PaymentMethod;
+  status: PaymentStatus;
+  /** rupees, not paise, at the UI boundary */
+  amount?: number;
+  /** gateway order id — Razorpay style */
+  orderRef?: string;
+  /** true while the platform holds the money on the customer's behalf */
+  protected: boolean;
+  updatedAt?: number;
+}
+
+export interface Cancellation {
+  by: 'client' | 'worker';
+  at: number;
+  reason?: string;
+  /** rupees actually charged; 0 when the cancellation was free */
+  fee: number;
+  refunded: boolean;
+}
 
 /* --------------------------------------------------------------- identity */
 
@@ -135,6 +180,25 @@ export interface Job {
   budgetMin?: number;
   budgetMax?: number;
 
+  /* ---- booking request details, gathered BEFORE workers are shown ---- */
+  /** photos of the problem — data URLs in this build, object storage later */
+  photos?: string[];
+  timePref?: TimePreference;
+  /** epoch ms when timePref is 'scheduled' */
+  scheduledAt?: number;
+  duration?: DurationEstimate;
+  /** workers the request was sent to */
+  requestedWorkerIds?: string[];
+
+  /* ---- lifecycle timestamps, used by the cancellation policy ---- */
+  requestedAt?: number;
+  acceptedAt?: number;
+  travelStartedAt?: number;
+  startedAt?: number;
+  completedAt?: number;
+
+  cancellation?: Cancellation;
+
   urgency: Urgency;
   estimatedHours: number;
   geo: Geo;
@@ -146,8 +210,7 @@ export interface Job {
   status: JobStatus;
   assignedWorkerId?: string;
   agreedAmount?: number;
-  paymentMethod?: PaymentMethod;
-  paymentStatus?: PaymentStatus;
+  payment: Payment;
 
   isScrap?: boolean;
   scrapItems?: ScrapItem[];
