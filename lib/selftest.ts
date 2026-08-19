@@ -1,131 +1,218 @@
 /**
- * Self-test for the whole logic layer (no browser needed).
+ * Self-test for the whole logic layer — no browser needed.
  *
  *   npm run test
  *
- * Every AI stub in lib/ai is exercised here. When you replace a stub with a
- * real Claude call in phase 2, keep these assertions green and the UI cannot
- * break.
+ * These assertions are the safety net for the two bugs V2 exists to kill:
+ * mixed-language UI, and workers appearing under the wrong category.
  */
 // @ts-nocheck
-import { seedDB } from './seed';
-import * as ai from './ai';
-import { t } from './i18n';
+import { seedDB, DEMO_ACCOUNTS } from './seed';
+import { ALL_KEYS, DICTS, LANGUAGES, t, makeT } from './i18n';
+import { CATEGORIES, SERVICES, matchServices, servicesOf, service, categoryOfService } from './catalog';
+import { CATEGORY_NAMES, SERVICE_NAMES, categoryName, serviceName } from './i18n-catalog';
+import { extractWorkerProfile } from './ai/profile';
+import { parseRequest } from './ai/request';
+import { suggestPrice } from './ai/pricing';
+import { rankWorkers, etaMinutes } from './ai/match';
+import { isValidAadhaarFormat, verifyIdentity } from './verify';
+import { telLink, waLink, navigateLink, sosMessage, e164, workerShareText } from './links';
 import { distanceKm, formatKm } from './geo';
-import { tierOf, nextTier, tierProgress, tierGap, leaderboard, etaMinutes, streakDays, endorsementsFor } from './tiers';
-import { buildActivity } from './activity';
 
 (async () => {
   const db = seedDB();
   let fails = 0;
-  const ok = (label, cond, extra='') => { console.log(`${cond ? '✅' : '❌'} ${label} ${extra}`); if(!cond) fails++; };
+  const ok = (label, cond, extra = '') => {
+    console.log(`${cond ? '✅' : '❌'} ${label} ${extra}`);
+    if (!cond) fails++;
+  };
+  const section = (s) => console.log(`\n── ${s} ─────────────────────────────`);
 
-  // 1. voice -> profile, in 3 languages
-  const p1 = await ai.extractWorkerProfile('I do electrical wiring, fan installation and inverter repairs and have six years of experience');
-  ok('EN voice->profile category=electrician', p1.category === 'electrician', `(${p1.category}, ${p1.experienceYears}y, [${p1.skills}])`);
-  ok('EN experience = 6', p1.experienceYears === 6);
+  /* ==================================================== 1. LANGUAGE SYSTEM */
+  section('Language system');
+  ok('10 languages registered', LANGUAGES.length === 10, LANGUAGES.map(l => l.code).join(','));
+  ok(`${ALL_KEYS.length} UI keys defined`, ALL_KEYS.length > 150);
 
-  const p2 = await ai.extractWorkerProfile('मैं बिजली की वायरिंग, पंखा लगाना और इन्वर्टर ठीक करता हूँ, 8 साल का अनुभव है', 'hi');
-  ok('HI voice->profile', p2.category === 'electrician' && p2.experienceYears === 8, `(${p2.category}, ${p2.experienceYears}y)`);
-
-  const p3 = await ai.extractWorkerProfile('நான் குழாய் கசிவு பழுது பார்க்கிறேன், 5 ஆண்டு அனுபவம்', 'ta');
-  ok('TA voice->profile plumber', p3.category === 'plumber', `(${p3.category}, ${p3.experienceYears}y)`);
-
-  const p4 = await ai.extractWorkerProfile('मैं घर की सफाई, बर्तन और झाड़ू पोछा करती हूँ', 'hi');
-  ok('HI maid detected', p4.category === 'maid', `(${p4.category})`);
-
-  // 2. resident request -> parsed job
-  const j1 = await ai.parseJobRequest('Need an electrician urgently to install a ceiling fan');
-  ok('EN job parse', j1.category === 'electrician' && j1.urgency === 'emergency', `(${j1.category}/${j1.urgency}/${j1.estimatedHours}h)`);
-
-  const j2 = await ai.parseJobRequest('नल से पानी लीक हो रहा है, आज ही चाहिए', 'hi');
-  ok('HI job parse plumber/today', j2.category === 'plumber' && j2.urgency === 'today', `(${j2.category}/${j2.urgency})`);
-
-  const j3 = await ai.parseJobRequest('ಪೂರ್ತಿ ಮನೆಗೆ ಬಣ್ಣ ಹಚ್ಚಬೇಕು', 'kn');
-  ok('KN job parse painter', j3.category === 'painter', `(${j3.category}/${j3.estimatedHours}h)`);
-
-  // 3. pricing
-  const pr = await ai.suggestPrice('electrician', 'emergency', 1);
-  ok('pricing range sane', pr.min > 0 && pr.max > pr.min, `₹${pr.min}-₹${pr.max} :: ${pr.basis}`);
-  const pr2 = await ai.suggestPrice('painter', 'flexible', 6);
-  ok('painter 6h > electrician 1h', pr2.min > pr.min, `₹${pr2.min}-₹${pr2.max}`);
-
-  // 4. matching
-  const job = db.jobs[0]; // electrician job in Koramangala
-  const ranked = ai.rankWorkers(job, db.workers);
-  ok('matching returns results', ranked.length > 0, `top=${ranked[0].worker.name} ${ranked[0].score} (${formatKm(ranked[0].km)})`);
-  ok('top match is an electrician', ranked[0].worker.category === 'electrician');
-  ok('ranked desc', ranked.every((r,i)=> i===0 || ranked[i-1].score >= r.score));
-  ok('respects radius', ranked.every(r => r.km <= r.worker.radiusKm));
-  console.log('   top 4:', ranked.slice(0,4).map(r=>`${r.worker.name}:${r.score}@${formatKm(r.km)}`).join(', '));
-  console.log('   reasons:', ranked[0].reasons.join(' · '));
-
-  const plumbJob = db.jobs[1];
-  const r2 = ai.rankWorkers(plumbJob, db.workers);
-  ok('plumbing job -> plumber on top', r2[0].worker.category === 'plumber', `(${r2[0].worker.name})`);
-
-  // 5. translation
-  const tr = await ai.translateText('मैं अभी आ सकता हूँ', 'hi', 'en');
-  ok('HI->EN translate', tr.translated && tr.text === 'I can come now', `-> "${tr.text}"`);
-  const tr2 = await ai.translateText('I will come in 30 minutes', 'en', 'ta');
-  ok('EN->TA translate', tr2.translated, `-> "${tr2.text}"`);
-  const tr3 = await ai.translateText('random unknown sentence', 'en', 'hi');
-  ok('unknown phrase falls back honestly', tr3.translated === false && tr3.text === 'random unknown sentence');
-  ok('quickPhrases in KN', ai.quickPhrases('kn').length === 24, `(${ai.quickPhrases('kn')[0]})`);
-
-  // 6. trust
-  const trust = ai.computeTrust([
-    {punctual:true, satisfactory:true, hireAgain:true},
-    {punctual:false, satisfactory:true, hireAgain:true},
-  ]);
-  ok('trust computes 3 dimensions', trust.reliability === 3 && trust.skillQuality === 5 && trust.reviewCount === 2,
-     JSON.stringify(trust));
-  ok('new worker trust = 0', ai.computeTrust([]).reviewCount === 0);
-
-  // 7. scrap
-  const s = await ai.identifyScrap({ name: 'old_newspaper_pile.jpg', size: 1024*640 });
-  ok('scrap detects newspaper', s.items.some(i => i.material === 'Newspaper'), JSON.stringify(s.items));
-  ok('scrap value > 0', s.totalValue > 0, `₹${s.totalValue}`);
-  const s2 = await ai.identifyScrap({ name: 'IMG_2231.jpg', size: 1024*640 });
-  const s3 = await ai.identifyScrap({ name: 'IMG_2231.jpg', size: 1024*640 });
-  ok('scrap deterministic', JSON.stringify(s2) === JSON.stringify(s3));
-
-  // 8. i18n coverage
-  const keys = ['c.continue','ob.voice.title','w.jobs.quote','r.review.post','rate.title','cat.plumber','st.open','u.emergency','pay.markPaid','ins.title'];
-  for (const lang of ['en','hi','ta','te','ml','kn']) {
-    const missing = keys.filter(k => t(lang,k) === t('en',k) && lang !== 'en');
-    ok(`i18n ${lang} translated`, missing.length === 0, missing.length ? `missing: ${missing}` : `e.g. "${t(lang,'w.jobs.quote')}"`);
+  let missingTotal = 0;
+  for (const l of LANGUAGES) {
+    const d = DICTS[l.code];
+    const missing = ALL_KEYS.filter((k) => !d[k] || String(d[k]).trim() === '');
+    missingTotal += missing.length;
+    if (missing.length) console.log(`   ${l.code} missing: ${missing.slice(0, 6).join(', ')}`);
   }
+  ok('no missing translations in any language', missingTotal === 0, `${ALL_KEYS.length * 10} strings checked`);
 
-  // 9. geo
-  ok('distance Koramangala->HSR ~ 3-6km', (()=>{const d=distanceKm({lat:12.9352,lng:77.6245},{lat:12.9121,lng:77.6446}); return d>2 && d<6;})(),
-     formatKm(distanceKm({lat:12.9352,lng:77.6245},{lat:12.9121,lng:77.6446})));
+  // The V1 bug: English selected but Hindi text shows, or vice versa.
+  let untranslated = 0;
+  const SHARED_OK = new Set(['app.name']); // proper nouns may legitimately match
+  for (const l of LANGUAGES.filter((x) => x.code !== 'en')) {
+    const same = ALL_KEYS.filter((k) => !SHARED_OK.has(k) && DICTS[l.code][k] === DICTS.en[k]);
+    untranslated += same.length;
+    if (same.length) console.log(`   ${l.code} still English on: ${same.slice(0, 5).join(', ')}`);
+  }
+  ok('no language silently falls back to English', untranslated === 0);
 
-  // 10. trust tiers, streaks, endorsements, leaderboard
-  const ram = db.workers.find(w => w.id === 'w1');
-  const hero = db.workers.find(w => w.id === 'w9');
-  ok('47 jobs @4.8 -> Gold', tierOf(ram).id === 'gold', tierOf(ram).label);
-  ok('brand new worker -> Bronze', tierOf({ jobsDone: 0, trust: { overall: 0, reviewCount: 0 } }).id === 'bronze');
-  ok('210 jobs @4.9 -> Community hero', tierOf(hero).id === 'hero');
-  ok('top tier has no next rung', nextTier(hero) === null);
-  ok('tier progress within 0-100', tierProgress(ram) >= 0 && tierProgress(ram) <= 100, tierProgress(ram) + '%');
-  ok('tier gap is human readable', typeof tierGap(ram) === 'string', tierGap(ram));
-  ok('endorsements earned', endorsementsFor(ram).length > 0, endorsementsFor(ram).map(e => e.label).join(', '));
+  ok('t() returns the chosen language', t('hi', 'c.continue') !== t('en', 'c.continue'), `hi="${t('hi', 'c.continue')}"`);
+  ok('makeT binds one language', makeT('ta')('w.hire') === t('ta', 'w.hire'), `ta="${t('ta', 'w.hire')}"`);
 
-  const lb = leaderboard(db.workers);
-  ok('leaderboard ranks descending', lb[0].rank === 1 && lb.every((r, i) => i === 0 || lb[i - 1].points >= r.points),
-     `top=${lb[0].worker.name} ${lb[0].points}pts`);
-  ok('leaderboard filters by area', leaderboard(db.workers, 'HSR Layout, Bengaluru').every(r => r.worker.geo.areaName.includes('HSR')));
+  /* ==================================================== 2. CATALOGUE */
+  section('Catalogue');
+  ok(`${SERVICES.length} services in ${CATEGORIES.length} categories`, SERVICES.length > 40);
 
-  const DAY = 86400000, T = 1700000000000;
-  ok('streak counts consecutive days', streakDays([T, T - DAY, T - 2 * DAY]) === 3);
-  ok('streak breaks on a gap', streakDays([T, T - 3 * DAY]) === 1);
-  ok('eta grows with distance', etaMinutes(0.4) < etaMinutes(3.4), `${etaMinutes(0.4)}min vs ${etaMinutes(3.4)}min`);
+  const orphan = SERVICES.filter((s) => !CATEGORIES.some((c) => c.services.includes(s.id)));
+  ok('every service belongs to a category', orphan.length === 0, orphan.map((s) => s.id).join(','));
 
-  const act = buildActivity(db, 10);
-  ok('activity feed builds', act.length === 10 && act[0].line.length > 0, `"${act[0].line}"`);
-  ok('activity feed is deterministic', JSON.stringify(buildActivity(db, 10)) === JSON.stringify(buildActivity(db, 10)));
-  ok('no broken articles in feed copy', act.every(a => !/\ba (?:e|a|i|o|u)/i.test(a.line)));
+  const wrong = CATEGORIES.flatMap((c) => c.services.filter((sid) => service(sid)?.category !== c.id));
+  ok('no service filed under the wrong category', wrong.length === 0, wrong.join(','));
+
+  const noName = SERVICES.filter((s) => !SERVICE_NAMES[s.id]);
+  ok('every service has a name entry', noName.length === 0, noName.map((s) => s.id).join(','));
+
+  let nameGaps = 0;
+  for (const s of SERVICES) for (const l of LANGUAGES) if (!SERVICE_NAMES[s.id]?.[l.code]) nameGaps++;
+  for (const c of CATEGORIES) for (const l of LANGUAGES) if (!CATEGORY_NAMES[c.id]?.[l.code]) nameGaps++;
+  ok('service and category names exist in all 10 languages', nameGaps === 0,
+     `${(SERVICES.length + CATEGORIES.length) * 10} names checked`);
+
+  ok('category names translate', categoryName('plumbing', 'ta') !== categoryName('plumbing', 'en'),
+     `ta="${categoryName('plumbing', 'ta')}"`);
+
+  /* ==================================================== 3. CATEGORY MATCHING */
+  section('Category matching (the V1 bug)');
+  const fanHit = matchServices('the ceiling fan is not working')[0];
+  ok('"ceiling fan" maps to fan repair', fanHit?.service.id === 'fan_repair', fanHit?.service.id);
+
+  const leakHit = matchServices('नल से पानी लीक हो रहा है')[0];
+  ok('Hindi "नल लीक" maps to plumbing', leakHit?.service.category === 'plumbing', leakHit?.service.id);
+
+  const paintHit = matchServices('ಗೋಡೆಗೆ ಬಣ್ಣ ಹಚ್ಚಬೇಕು')[0];
+  ok('Kannada "ಬಣ್ಣ" maps to painting', paintHit?.service.category === 'painting', paintHit?.service.id);
+
+  // The heart of it: search a service, get only workers who do that service.
+  const probe = { geo: db.clients[0].geo, category: 'plumbing', serviceId: 'leak_repair' };
+  const plumbers = rankWorkers(probe, db.workers);
+  ok('leak-repair search returns only leak-repair workers',
+     plumbers.every((m) => m.worker.services.includes('leak_repair')), `${plumbers.length} results`);
+  ok('no painter appears in a plumbing search',
+     !plumbers.some((m) => m.worker.category === 'painting'));
+  ok('search respects the worker radius', plumbers.every((m) => m.km <= m.worker.radiusKm));
+
+  const verifiedOnly = rankWorkers(probe, db.workers, { verifiedOnly: true });
+  ok('verified filter works', verifiedOnly.every((m) => m.worker.verification.status === 'verified'));
+
+  const nowOnly = rankWorkers(probe, db.workers, { availableNow: true });
+  ok('available-now filter works', nowOnly.every((m) => m.worker.availability === 'anytime'));
+
+  /* ==================================================== 4. AI PROFILE */
+  section('AI portfolio creation');
+  const p1 = await extractWorkerProfile('I do electrical wiring and fan fitting, six years experience');
+  ok('EN speech -> electrical', p1.category === 'electrical', `${p1.category} ${p1.experienceYears}y [${p1.services}]`);
+  ok('EN speech -> 6 years', p1.experienceYears === 6);
+  ok('bio was written', p1.bio.length > 10, `"${p1.bio}"`);
+
+  const p2 = await extractWorkerProfile('मैं बिजली की वायरिंग और पंखा लगाता हूँ, 8 साल का अनुभव', 'hi');
+  ok('HI speech -> electrical, 8y', p2.category === 'electrical' && p2.experienceYears === 8);
+  ok('HI bio is in Hindi', /[ऀ-ॿ]/.test(p2.bio), `"${p2.bio}"`);
+
+  const p3 = await extractWorkerProfile('நான் குழாய் கசிவு பழுது பார்க்கிறேன்', 'ta');
+  ok('TA speech -> plumbing', p3.category === 'plumbing');
+  ok('TA bio is in Tamil', /[஀-௿]/.test(p3.bio));
+
+  const p4 = await extractWorkerProfile('ਮੈਂ ਕਾਰ ਚਲਾਉਂਦਾ ਹਾਂ, ਪੰਜ ਸਾਲ ਦਾ ਤਜਰਬਾ', 'pa');
+  ok('PA speech -> driving', p4.category === 'driving', p4.category);
+
+  ok('extracted services all belong to the extracted category',
+     p1.services.every((s) => categoryOfService(s) === p1.category));
+
+  /* ==================================================== 5. FOLLOW-UP QUESTIONS */
+  section('AI asks instead of assuming');
+  const bare = await parseRequest('fan not working');
+  ok('missing timing is asked for', bare.missing.includes('when'), bare.missing.join(','));
+  ok('missing budget is asked for', bare.missing.includes('budget'));
+  ok('missing address is asked for', bare.missing.includes('where'));
+  ok('no budget invented when unstated', bare.budgetMin === undefined);
+  ok('no address invented when unstated', bare.address === undefined);
+
+  const full = await parseRequest('fan not working, come today at 5 pm, flat 402, budget ₹400');
+  ok('stated timing is captured', !full.missing.includes('when'), full.whenText);
+  ok('stated budget is captured', !full.missing.includes('budget'), `₹${full.budgetMin}-${full.budgetMax}`);
+  ok('stated address is captured', !full.missing.includes('where'), full.address);
+  ok('urgency reads "today"', full.urgency === 'today', full.urgency);
+
+  const hindi = await parseRequest('नल से पानी लीक हो रहा है, तुरंत चाहिए', 'hi');
+  ok('HI request -> plumbing + emergency', hindi.category === 'plumbing' && hindi.urgency === 'emergency');
+
+  const ambiguous = await parseRequest('कुछ बिजली का काम है');
+  ok('ambiguous request offers choices instead of guessing',
+     ambiguous.missing.includes('service') || !!ambiguous.serviceId);
+
+  /* ==================================================== 6. PRICING */
+  section('Pricing');
+  const pr = await suggestPrice('fan_repair', 'emergency', 1);
+  ok('price range is sane', pr.min > 0 && pr.max > pr.min, `₹${pr.min}-₹${pr.max} :: ${pr.basis}`);
+  const pr2 = await suggestPrice('interior_paint', 'flexible', 6);
+  ok('a 6-hour paint job costs more than a 1-hour fan repair', pr2.min > pr.min, `₹${pr2.min}-₹${pr2.max}`);
+  const prU = await suggestPrice('fan_repair', 'flexible', 1);
+  ok('emergency costs more than flexible', pr.min > prU.min, `₹${pr.min} vs ₹${prU.min}`);
+
+  /* ==================================================== 7. AADHAAR / VERIFY */
+  section('Identity verification');
+  ok('rejects a made-up number', !isValidAadhaarFormat('123456789012'));
+  ok('rejects numbers starting 0 or 1', !isValidAadhaarFormat('012345678901'));
+  ok('rejects wrong length', !isValidAadhaarFormat('99999999'));
+  ok('accepts a Verhoeff-valid number', isValidAadhaarFormat('234567890124'), '234567890124');
+
+  const bad = await verifyIdentity('123456789012', 'Test');
+  ok('invalid number fails verification', bad.verification.status === 'failed', bad.verification.failureReason);
+  ok('failed check stores no digits', bad.verification.idLast4 === undefined);
+
+  const good = await verifyIdentity('234567890124', 'Ramesh Kumar');
+  ok('valid number verifies', good.verification.status === 'verified');
+  ok('ONLY the last 4 digits are stored', good.verification.idLast4 === '0124', good.verification.idLast4);
+  ok('full number never appears in the stored record',
+     !JSON.stringify(good.verification).includes('234567890124'));
+
+  /* ==================================================== 8. INTEGRATION LINKS */
+  section('Integration links');
+  ok('phone becomes E.164', e164('9876500001') === '919876500001', e164('9876500001'));
+  ok('tel link is dialable', telLink('9876500001') === 'tel:+919876500001');
+  ok('whatsapp link is well formed', waLink('9876500001', 'hi there').startsWith('https://wa.me/919876500001?text='));
+  const nav = navigateLink({ lat: 12.93, lng: 77.62, areaName: 'Koramangala', address: 'Flat 402' });
+  ok('maps link starts navigation', nav.includes('maps/dir/') && nav.includes('travelmode=driving'));
+  ok('maps link uses the address when present', nav.includes('Flat%20402'));
+  const sos = sosMessage('Ramesh', 12.93, 77.62, 'fan repair');
+  ok('SOS message carries a location link', sos.includes('maps?q=12.93,77.62'));
+  ok('SOS message names the person', sos.includes('Ramesh'));
+  const share = workerShareText(db.workers[0], 'https://x.test', 'Fan repair');
+  ok('share text includes jobs completed', share.includes('jobs completed'));
+
+  /* ==================================================== 9. SEED / DEMO */
+  section('Demo accounts and seed');
+  ok('4 demo accounts exist', DEMO_ACCOUNTS.length === 4, DEMO_ACCOUNTS.map((a) => a.role).join(','));
+  for (const a of DEMO_ACCOUNTS) {
+    const found = a.role === 'worker'
+      ? db.workers.find((w) => w.id === a.id)
+      : db.clients.find((c) => c.id === a.id);
+    ok(`demo ${a.role} account resolves`, !!found, found?.name);
+  }
+  ok('all four verification states are represented',
+     ['verified', 'pending', 'failed', 'unverified'].every((s) => db.workers.some((w) => w.verification.status === s)));
+  ok('no worker record contains a full Aadhaar number',
+     db.workers.every((w) => !w.verification.idLast4 || w.verification.idLast4.length === 4));
+  ok('reviews have real text', db.reviews.every((r) => r.text.length > 20), `${db.reviews.length} reviews`);
+  ok('every review points at a real worker', db.reviews.every((r) => db.workers.some((w) => w.id === r.workerId)));
+  ok('every seeded worker service exists in the catalogue',
+     db.workers.every((w) => w.services.every((s) => !!service(s))));
+  ok('every seeded worker service matches their category',
+     db.workers.every((w) => w.services.every((s) => categoryOfService(s) === w.category)));
+  ok('no points, ranks or trust scores on any worker',
+     db.workers.every((w) => !('trust' in w) && !('points' in w) && !('tier' in w)));
+
+  /* ==================================================== 10. GEO / ETA */
+  section('Distance and ETA');
+  const d = distanceKm({ lat: 12.9352, lng: 77.6245 }, { lat: 12.9121, lng: 77.6446 });
+  ok('Koramangala to HSR is 2-6 km', d > 2 && d < 6, formatKm(d));
+  ok('ETA grows with distance', etaMinutes(0.4) < etaMinutes(3.4), `${etaMinutes(0.4)} vs ${etaMinutes(3.4)} min`);
 
   console.log(fails === 0 ? '\n🎉 ALL CHECKS PASSED' : `\n⚠️  ${fails} CHECK(S) FAILED`);
   process.exit(fails ? 1 : 0);

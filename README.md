@@ -9,11 +9,11 @@
 layer stubbed behind clean interfaces. Phase 2: swap the stubs for real Claude
 calls — no UI code changes.**
 
-**Design: [Aurora](./DESIGN.md)** — layered glass, gradient mesh, adaptive dark
-mode, spring motion. Three screens are fully rebuilt on it (`/`,
-`/worker/onboarding`, `/discover`) plus `/leaderboard`; the rest run on a
-compatibility bridge and inherit the new palette and dark mode until they are
-migrated.
+**V2 is a rebuild.** Four user types, ten languages with compile-enforced
+completeness, a two-level category system, Aadhaar verification, SOS, and
+WhatsApp / Maps / calling integration. See **[V2.md](./V2.md)** for the
+architecture, schema, integrations and full bug audit, and
+**[DESIGN.md](./DESIGN.md)** for the Aurora design system.
 
 ---
 
@@ -50,22 +50,30 @@ browser's localStorage. "Reset demo" on the home page restores it.
 
 | Route | What it is |
 |---|---|
-| `/` | Language + role chooser |
-| `/join` | QR-code landing page (posters point here) |
-| `/worker/onboarding` | **Conversational AI sign-up** — the AI asks, you speak |
-| `/discover` | **Smart worker marketplace** — match rings, tiers, ETA, live availability |
-| `/leaderboard` | **Community ranks** — Bronze → Community hero |
-| `/worker` | Ranked jobs near me |
-| `/worker/mine` | Hired jobs + sent quotes |
-| `/worker/profile` | Skills, trust score, radius, availability |
-| `/worker/job/[id]` | Job detail, quote, chat, mark complete |
-| `/resident/login` | Phone + OTP |
-| `/resident` | My requests |
-| `/resident/new` | Post a job by voice/text → AI parse → fair price |
-| `/resident/job/[id]` | Ranked workers, quotes, hire, chat, pay, rate |
-| `/scrap` | Raddiwala flow (photo → materials → collector) |
-| `/insights` | Community demand analytics |
-| `/qr` | Printable onboarding poster |
+| `/login` | Role picker + one-tap demo accounts |
+| `/` | Search-first home (clients) or job feed (workers) |
+| `/search` | Categories → services → workers who do that exact service |
+| `/worker/[id]` | Public profile: facts and reviews, no scores |
+| `/worker/onboarding` | Conversational AI sign-up |
+| `/verify` | Aadhaar verification (simulated, KYC-ready) |
+| `/post` | Job posting — the AI asks instead of assuming |
+| `/job/[id]` | Live job: call, WhatsApp, Maps, SOS, chat, payment, review |
+| `/hire` | Bulk hiring for societies and businesses |
+| `/jobs`, `/me` | My jobs, profile and settings |
+| `/join`, `/qr` | QR onboarding landing page and printable poster |
+
+## Demo accounts
+
+No registration needed — one tap on `/login`:
+
+| Role | Who | Phone |
+|---|---|---|
+| Worker | Ramesh Kumar, electrician, Aadhaar verified | 9000000001 |
+| Resident | Priya Menon | 9000000002 |
+| Society | Anil Sharma, Green Valley Apartments | 9000000003 |
+| Business | Rakesh Sharma, Sharma Kirana Store | 9000000004 |
+
+OTP is always **123456**.
 
 ## Architecture
 

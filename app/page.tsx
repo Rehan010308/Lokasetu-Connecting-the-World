@@ -3,265 +3,277 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LANGUAGES, speechLocale } from '@/lib/i18n';
-import { CATEGORIES, categoryById } from '@/lib/ai/taxonomy';
-import { distanceKm, formatKm } from '@/lib/geo';
-import { etaMinutes } from '@/lib/tiers';
-import { buildActivity } from '@/lib/activity';
-import { useActions, useStore, useT } from '@/components/store';
-import { ThemeToggle } from '@/components/theme';
-import {
-  Counter, Dock, GlassCard, LiveFeed, Magnetic, RadarMap, Reveal, Sheet,
-  Stagger, StaggerItem, VoiceOrb, type RadarPin,
-} from '@/components/aurora';
+import { CATEGORIES } from '@/lib/catalog';
+import { categoryName, serviceName } from '@/lib/i18n-catalog';
+import { matchServices } from '@/lib/catalog';
+import { rankWorkers, etaMinutes } from '@/lib/ai/match';
+import { formatKm } from '@/lib/geo';
+import { useMe, useStore, useT } from '@/components/store';
+import { useSpeech } from '@/components/kit';
+import { Dock, GlassCard, Magnetic, Reveal, Stagger, StaggerItem, VoiceOrb } from '@/components/aurora';
+import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
+import { navNormal, navWorker } from '@/components/nav';
 
-/* Fixed schematic positions — a radar, not a street map. Kept off the centre
-   and off each other so no two pins ever collide. */
-const PIN_SPOTS = [
-  { x: 27, y: 30 }, { x: 70, y: 27 }, { x: 33, y: 73 },
-  { x: 76, y: 68 }, { x: 62, y: 54 }, { x: 22, y: 55 },
-];
+/* The six things people actually search for most. Fewer, bigger targets. */
+const QUICK = ['fan_repair', 'leak_repair', 'home_cleaning', 'maid', 'ac_service', 'car_driver'];
 
 export default function Home() {
   const router = useRouter();
+  const { db, ready } = useStore();
+  const me = useMe();
   const { t, lang } = useT();
-  const { setLang } = useActions();
-  const { db } = useStore();
   const [q, setQ] = React.useState('');
-  const [langOpen, setLangOpen] = React.useState(false);
-  const [listening, setListening] = React.useState(false);
-  const recRef = React.useRef<any>(null);
+  const speech = useSpeech(lang, setQ);
 
-  React.useEffect(() => () => { try { recRef.current?.stop(); } catch {} }, []);
+  /* Not signed in yet → send them to pick a role. */
+  React.useEffect(() => {
+    if (ready && !me.role) router.replace('/login');
+  }, [ready, me.role, router]);
 
-  /* Voice search. Falls back silently to the text field where the Web Speech
-     API is missing, so the button is never a dead end. */
-  function toggleVoice() {
-    if (listening) { try { recRef.current?.stop(); } catch {} setListening(false); return; }
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-    const rec = new SR();
-    rec.lang = speechLocale(lang);
-    rec.interimResults = true;
-    rec.onresult = (e: any) => {
-      let txt = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) txt += e.results[i][0].transcript;
-      setQ(txt);
-    };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    try { rec.start(); recRef.current = rec; setListening(true); } catch { setListening(false); }
+  if (!ready || !me.role) {
+    return <Shell><main className="page" style={{ paddingTop: 100 }}><Empty icon="⏳" text={t('c.loading')} /></main></Shell>;
   }
 
-  const here = db.residents[0]?.geo ?? db.workers[0].geo;
+  return me.role === 'worker' ? <WorkerHome /> : <ClientHome q={q} setQ={setQ} speech={speech} />;
+}
 
-  /* Workers ranked by pure proximity for the radar + the "nearest" line. */
-  const near = React.useMemo(() => {
-    return db.workers
-      .map((w) => ({ w, km: distanceKm(here, w.geo) }))
-      .sort((a, b) => a.km - b.km);
-  }, [db.workers, here]);
+/* =========================================================== CLIENT HOME */
 
-  const pins: RadarPin[] = near.slice(0, 6).map((n, i) => ({
-    id: n.w.id,
-    icon: categoryById(n.w.category).icon,
-    label: `${n.w.name} · ${formatKm(n.km)}`,
-    ...PIN_SPOTS[i],
-  }));
+function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void; speech: ReturnType<typeof useSpeech> }) {
+  const router = useRouter();
+  const { db } = useStore();
+  const me = useMe();
+  const { t, lang } = useT();
 
-  const available = db.workers.filter((w) => w.availability === 'anytime').length;
-  const activity = React.useMemo(() => buildActivity(db, 10), [db]);
-  const nearest = near[0];
+  const myJobs = db.jobs
+    .filter((j) => j.clientId === me.id && j.status !== 'completed' && j.status !== 'cancelled')
+    .slice(0, 3);
 
-  function search(text: string) {
-    const clean = text.trim();
-    if (!clean) return;
-    router.push(`/discover?q=${encodeURIComponent(clean)}`);
+  /** Search jumps straight to the best-matching service — never a dead end. */
+  function submit() {
+    const text = q.trim();
+    if (!text) return;
+    const hits = matchServices(text);
+    if (hits.length) {
+      router.push(`/search?cat=${hits[0].service.category}&svc=${hits[0].service.id}`);
+    } else {
+      router.push(`/post?q=${encodeURIComponent(text)}`);
+    }
   }
+
+  const orgLine = me.client?.orgName ? `${me.client.orgName} · ` : '';
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="mark" aria-hidden>क</div>
-        <div className="grow">
-          <div className="t-h3">{t('app.name')}</div>
-          <div className="t-xs">काम सेतु · {t('app.tagline')}</div>
-        </div>
-        <button className="icon-btn" onClick={() => setLangOpen(true)} aria-label="Change language">
-          🌐 {lang.toUpperCase()}
-        </button>
-        <ThemeToggle />
-      </header>
-
+    <Shell>
+      <TopBar title={me.name} subtitle={`${orgLine}📍 ${me.geo.areaName.split(',')[0]}`} right={<HeaderTools />} />
       <main className="page v-6" style={{ paddingTop: 4 }}>
 
-        {/* ------------------------------------------------ hero */}
-        <section className="v-4">
-          <Reveal y={10}>
-            <div className="h-2">
-              <span className="live-dot" />
-              <p className="t-micro">
-                {here.areaName.split(',')[0]} · {available} workers online
-              </p>
-            </div>
-          </Reveal>
+        <Reveal>
+          <h1 className="t-display">{t('h.greeting')}</h1>
+        </Reveal>
 
-          <Reveal delay={0.05}>
-            <h1 className="t-display">
-              Need help<br />
-              <span className="t-grad">today?</span>
-            </h1>
-          </Reveal>
-
-          <Reveal delay={0.1}>
-            <p className="t-body">
-              Tell us in your own words — speak or type, in any language. We find someone
-              trusted, close by, in about a minute.
-            </p>
-          </Reveal>
-
-          <Reveal delay={0.15}>
-            <form
-              className="field"
-              onSubmit={(e) => { e.preventDefault(); search(q); }}
-            >
-              <span aria-hidden style={{ fontSize: 20, opacity: 0.5 }}>🔎</span>
-              <input
-                className="input bare grow"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Fan not working, need electrician…"
-                aria-label="Describe what you need"
+        <Reveal delay={0.05}>
+          <form className="field" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+            <span aria-hidden style={{ fontSize: 20, opacity: 0.5 }}>🔎</span>
+            <input
+              className="input bare grow"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t('h.searchPh')}
+              aria-label={t('h.searchPh')}
+            />
+            <Magnetic>
+              <VoiceOrb
+                compact size={46} live={speech.listening}
+                label={t('h.speak')}
+                onClick={() => (speech.listening ? speech.stop() : speech.start(q))}
               />
-              <Magnetic>
-                <VoiceOrb compact size={46} live={listening} label="Speak your request" onClick={toggleVoice} />
-              </Magnetic>
-            </form>
-          </Reveal>
+            </Magnetic>
+          </form>
+        </Reveal>
 
-          <Stagger className="scroll-x" gap={0.04}>
-            {CATEGORIES.filter((c) => c.id !== 'other').slice(0, 7).map((c) => (
-              <StaggerItem key={c.id}>
-                <Link href={`/discover?cat=${c.id}`} className="chip">
-                  {c.icon} {t(`cat.${c.id}` as any)}
+        {q.trim() ? (
+          <Reveal><button className="btn" onClick={submit}>{t('p.find')} →</button></Reveal>
+        ) : null}
+
+        {/* common needs — the fastest path for someone who cannot type */}
+        <section className="v-3">
+          <div className="between">
+            <h2 className="t-h3">{t('h.popular')}</h2>
+            <Link href="/search" className="t-xs strong" style={{ color: 'var(--em-600)' }}>{t('h.browse')} →</Link>
+          </div>
+          <Stagger className="grid-3" gap={0.04}>
+            {QUICK.map((sid) => {
+              const cat = CATEGORIES.find((c) => c.services.includes(sid));
+              if (!cat) return null;
+              return (
+                <StaggerItem key={sid}>
+                  <Link href={`/search?cat=${cat.id}&svc=${sid}`} style={{ display: 'block' }}>
+                    <GlassCard interactive className="pad-s mid" style={{ minHeight: 100 }}>
+                      <div style={{ fontSize: 26 }} aria-hidden>{cat.icon}</div>
+                      <div className="t-xs strong" style={{ marginTop: 6, lineHeight: 1.25 }}>
+                        {serviceName(sid, lang)}
+                      </div>
+                    </GlassCard>
+                  </Link>
+                </StaggerItem>
+              );
+            })}
+          </Stagger>
+        </section>
+
+        {/* live jobs for this account */}
+        {myJobs.length ? (
+          <section className="v-3">
+            <div className="between">
+              <h2 className="t-h3">{t('h.myJobs')}</h2>
+              <Link href="/jobs" className="t-xs strong" style={{ color: 'var(--em-600)' }}>{t('h.viewAll')} →</Link>
+            </div>
+            {myJobs.map((j) => {
+              const w = j.assignedWorkerId ? db.workers.find((x) => x.id === j.assignedWorkerId) : null;
+              return (
+                <Link key={j.id} href={`/job/${j.id}`} style={{ display: 'block' }}>
+                  <GlassCard interactive className="pad-s">
+                    <div className="between">
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="t-sm strong" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {j.title}
+                        </div>
+                        <div className="t-xs" style={{ marginTop: 3 }}>
+                          {w ? `👷 ${w.name}` : t('j.open')}
+                        </div>
+                      </div>
+                      <span className={`tag ${j.status === 'open' ? 'in' : 'em'}`}>{t(`j.${j.status}` as any)}</span>
+                    </div>
+                  </GlassCard>
+                </Link>
+              );
+            })}
+          </section>
+        ) : null}
+
+        {/* society and business get their own hiring entry point */}
+        {me.role === 'society' || me.role === 'business' ? (
+          <Reveal>
+            <Link href="/hire" style={{ display: 'block' }}>
+              <GlassCard interactive sheen className="pad-l">
+                <div className="h-4">
+                  <div className="av m in" aria-hidden style={{ fontSize: 22 }}>
+                    {me.role === 'society' ? '🏢' : '🏪'}
+                  </div>
+                  <div className="grow">
+                    <h2 className="t-h3">{t(me.role === 'society' ? 'g.socTitle' : 'g.bizTitle')}</h2>
+                    <p className="t-xs" style={{ marginTop: 3 }}>
+                      {t(me.role === 'society' ? 'g.socSub' : 'g.bizSub')}
+                    </p>
+                  </div>
+                  <span aria-hidden style={{ fontSize: 22, color: 'var(--em-600)' }}>›</span>
+                </div>
+              </GlassCard>
+            </Link>
+          </Reveal>
+        ) : null}
+      </main>
+      <Dock items={navNormal(t)} />
+    </Shell>
+  );
+}
+
+/* =========================================================== WORKER HOME */
+
+function WorkerHome() {
+  const { db } = useStore();
+  const me = useMe();
+  const { t, lang } = useT();
+  const w = me.worker!;
+
+  /* Jobs this worker can actually do, inside the radius they chose. */
+  const feed = db.jobs
+    .filter((j) => j.status === 'open')
+    .map((j) => {
+      const [m] = rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]);
+      return m ? { job: j, km: m.km } : null;
+    })
+    .filter(Boolean) as { job: typeof db.jobs[number]; km: number }[];
+
+  const active = db.jobs.filter((j) => j.assignedWorkerId === w.id && j.status !== 'completed' && j.status !== 'cancelled');
+
+  return (
+    <Shell>
+      <TopBar title={w.name} subtitle={`📍 ${w.geo.areaName.split(',')[0]} · ${w.radiusKm} ${t('c.km')}`} right={<HeaderTools />} />
+      <main className="page v-4" style={{ paddingTop: 4 }}>
+
+        {/* verification nudge — the single highest-value action for a worker */}
+        {w.verification.status !== 'verified' ? (
+          <Reveal>
+            <Link href="/verify" style={{ display: 'block' }}>
+              <GlassCard interactive className="pad" glow="gd">
+                <div className="h-4">
+                  <div style={{ fontSize: 28 }} aria-hidden>🪪</div>
+                  <div className="grow">
+                    <div className="t-h3">{t('v.title')}</div>
+                    <p className="t-xs" style={{ marginTop: 3 }}>{t('v.sub')}</p>
+                  </div>
+                  <span aria-hidden style={{ fontSize: 20, color: 'var(--gd-600)' }}>›</span>
+                </div>
+              </GlassCard>
+            </Link>
+          </Reveal>
+        ) : null}
+
+        {active.length ? (
+          <section className="v-3">
+            <h2 className="t-h3">{t('n.jobs')}</h2>
+            {active.map((j) => (
+              <Link key={j.id} href={`/job/${j.id}`} style={{ display: 'block' }}>
+                <GlassCard interactive className="pad-s" glow="em">
+                  <div className="between">
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="t-sm strong">{j.title}</div>
+                      <div className="t-xs" style={{ marginTop: 3 }}>{j.geo.address ?? j.geo.areaName}</div>
+                    </div>
+                    <span className="tag em">{t(`j.${j.status}` as any)}</span>
+                  </div>
+                </GlassCard>
+              </Link>
+            ))}
+          </section>
+        ) : null}
+
+        <div className="between">
+          <h2 className="t-h2">{t('h.myJobs')}</h2>
+          <span className="tag">{feed.length}</span>
+        </div>
+
+        {feed.length === 0 ? <Empty text={t('h.noJobs')} icon="🧰" /> : (
+          <Stagger className="v-3" gap={0.06}>
+            {feed.map(({ job, km }) => (
+              <StaggerItem key={job.id}>
+                <Link href={`/job/${job.id}`} style={{ display: 'block' }}>
+                  <GlassCard interactive className="pad">
+                    <div className="t-h3" style={{ lineHeight: 1.3 }}>{job.title}</div>
+                    <div className="h-2 wrap" style={{ gap: 7, marginTop: 10 }}>
+                      <span className="tag in">{t(`u.${job.urgency}` as any)}</span>
+                      <span className="tag">📍 {formatKm(km)}</span>
+                      <span className="tag">~{etaMinutes(km)} {t('c.min')}</span>
+                      {job.serviceId ? <span className="tag">{serviceName(job.serviceId, lang)}</span> : null}
+                    </div>
+                    <hr className="rule" style={{ margin: '13px 0' }} />
+                    <div className="between">
+                      <div>
+                        <div className="t-xs">{t('p.estimate')}</div>
+                        <div className="t-sm strong t-num"><Money amount={job.priceMin} />–<Money amount={job.priceMax} /></div>
+                      </div>
+                      <span className="btn sm">{t('j.accept')}</span>
+                    </div>
+                  </GlassCard>
                 </Link>
               </StaggerItem>
             ))}
           </Stagger>
-        </section>
-
-        {/* ------------------------------------------------ radar */}
-        <Reveal delay={0.05}>
-          <GlassCard className="pad">
-            <div className="between" style={{ marginBottom: 14 }}>
-              <div>
-                <h2 className="t-h3">Workers near you</h2>
-                <p className="t-xs">Within 2 km of {here.areaName.split(',')[0]}</p>
-              </div>
-              <span className="tag em"><span className="live-dot" />{available} available</span>
-            </div>
-
-            <RadarMap pins={pins} />
-
-            {nearest ? (
-              <div className="between" style={{ marginTop: 14 }}>
-                <span className="t-xs">
-                  Nearest · <b className="strong">{nearest.w.name.split(' ')[0]}</b> {formatKm(nearest.km)}
-                </span>
-                <span className="tag cy">~{etaMinutes(nearest.km)} min away</span>
-              </div>
-            ) : null}
-          </GlassCard>
-        </Reveal>
-
-        {/* ------------------------------------------------ live activity */}
-        <Reveal delay={0.05}>
-          <GlassCard className="pad-s">
-            <div className="h-2" style={{ marginBottom: 8 }}>
-              <span className="live-dot" />
-              <p className="t-micro">Happening now</p>
-            </div>
-            <LiveFeed items={activity} />
-          </GlassCard>
-        </Reveal>
-
-        {/* ------------------------------------------------ worker entry */}
-        <Reveal delay={0.05}>
-          <Link href="/worker/onboarding" style={{ display: 'block' }}>
-            <GlassCard interactive sheen className="pad-l">
-              <div className="h-4">
-                <div className="av m gd" aria-hidden style={{ fontSize: 22 }}>🧰</div>
-                <div className="grow">
-                  <h2 className="t-h3">{t('home.iWorker')}</h2>
-                  <p className="t-xs" style={{ marginTop: 3 }}>
-                    Speak once. We build your profile and send you nearby jobs — free, forever.
-                  </p>
-                </div>
-                <span aria-hidden style={{ fontSize: 22, color: 'var(--em-600)' }}>›</span>
-              </div>
-            </GlassCard>
-          </Link>
-        </Reveal>
-
-        {/* ------------------------------------------------ proof */}
-        <Reveal delay={0.05}>
-          <GlassCard className="flat pad-s">
-            <div className="grid-3">
-              <div className="stat">
-                <div className="n t-grad"><Counter to={db.workers.reduce((s, w) => s + w.jobsDone, 0)} /></div>
-                <div className="l">Jobs done</div>
-              </div>
-              <div className="stat">
-                <div className="n t-grad"><Counter to={4.8} decimals={1} /></div>
-                <div className="l">Avg rating</div>
-              </div>
-              <div className="stat">
-                <div className="n t-grad"><Counter to={LANGUAGES.length} /></div>
-                <div className="l">Languages</div>
-              </div>
-            </div>
-          </GlassCard>
-        </Reveal>
-
-        <Reveal delay={0.05}>
-          <div className="grid-2">
-            <Link href="/scrap"><GlassCard interactive className="pad-s mid">
-              <div style={{ fontSize: 26 }} aria-hidden>♻️</div>
-              <div className="t-xs" style={{ marginTop: 6 }}>{t('home.scrap')}</div>
-            </GlassCard></Link>
-            <Link href="/leaderboard"><GlassCard interactive className="pad-s mid">
-              <div style={{ fontSize: 26 }} aria-hidden>🏆</div>
-              <div className="t-xs" style={{ marginTop: 6 }}>Community ranks</div>
-            </GlassCard></Link>
-          </div>
-        </Reveal>
+        )}
       </main>
-
-      <Dock items={[
-        { href: '/', icon: '🏠', label: 'Home' },
-        { href: '/discover', icon: '🔎', label: 'Find' },
-        { href: '/leaderboard', icon: '🏆', label: 'Ranks' },
-        { href: '/resident', icon: '👤', label: 'You' },
-      ]} />
-
-      <Sheet open={langOpen} onClose={() => setLangOpen(false)} title="भाषा / Language">
-        <div className="v-3">
-          {LANGUAGES.map((l) => (
-            <button
-              key={l.code}
-              className={`choice${l.code === lang ? ' on' : ''}`}
-              onClick={() => { setLang(l.code); setLangOpen(false); }}
-            >
-              <span className="lead" aria-hidden>🗣️</span>
-              <span>
-                <span className="ttl">{l.native}</span><br />
-                <span className="sub">{l.label}</span>
-              </span>
-              {l.code === lang ? <span className="mark">✓</span> : null}
-            </button>
-          ))}
-        </div>
-      </Sheet>
-    </div>
+      <Dock items={navWorker(t)} />
+    </Shell>
   );
 }

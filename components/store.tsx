@@ -2,19 +2,18 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type {
-  DB, Job, LangCode, Message, PaymentMethod, Quote, Resident, Review, Worker,
+  Client, DB, Job, JobStatus, LangCode, Message, MessageKind, PaymentMethod,
+  Review, Role, SosEvent, Verification, Worker,
 } from '@/lib/types';
-import { seedDB } from '@/lib/seed';
+import { seedDB, DEMO_ACCOUNTS } from '@/lib/seed';
 import { makeT, type TKey } from '@/lib/i18n';
-import { computeTrust } from '@/lib/ai/trust';
 
-const STORAGE_KEY = 'kaamsetu:v1';
+const STORAGE_KEY = 'kaamsetu:v2';
 
 /**
  * Phase 1 persistence: the browser.
- * Everything below is deliberately written as if it were an API client, so
- * moving to Postgres/Supabase later means rewriting this one file and nothing
- * else. All reads go through the `db` object; all writes go through `update`.
+ * Written as an API client so moving to Postgres means rewriting this one
+ * file. Every read goes through `db`; every write goes through `update`.
  */
 interface StoreValue {
   db: DB;
@@ -34,33 +33,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DB;
-        if (parsed && Array.isArray(parsed.workers)) setDb(parsed);
+        if (parsed && Array.isArray(parsed.workers) && Array.isArray(parsed.clients)) setDb(parsed);
       }
-    } catch {
-      /* corrupt storage - fall back to the seed */
-    }
+    } catch { /* corrupt storage — fall back to seed */ }
     setReady(true);
   }, []);
 
   useEffect(() => {
     if (!ready) return;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    } catch {
-      /* quota - ignore, demo only */
-    }
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch {}
   }, [db, ready]);
 
-  const update = useCallback((fn: (d: DB) => DB) => {
-    setDb((prev) => fn({ ...prev }));
-  }, []);
-
+  const update = useCallback((fn: (d: DB) => DB) => setDb((prev) => fn({ ...prev })), []);
   const reset = useCallback(() => {
     const fresh = seedDB();
     setDb(fresh);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
-    } catch {}
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)); } catch {}
   }, []);
 
   const value = useMemo(() => ({ db, ready, update, reset }), [db, ready, update, reset]);
@@ -73,23 +61,18 @@ export function useStore(): StoreValue {
   return v;
 }
 
-/** Current UI language + a bound translate function. */
+/** Current language plus a bound translate function. */
 export function useT() {
   const { db } = useStore();
   const lang = db.session.lang;
-  return useMemo(() => {
-    const fn = makeT(lang);
-    return { lang, t: (k: TKey) => fn(k) };
-  }, [lang]);
+  return useMemo(() => ({ lang, t: makeT(lang) as (k: TKey) => string }), [lang]);
 }
 
 export function newId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Actions - the "API"
-// ---------------------------------------------------------------------------
+/* ------------------------------------------------------------------ actions */
 
 export function useActions() {
   const { db, update, reset } = useStore();
@@ -98,66 +81,51 @@ export function useActions() {
     reset,
 
     setLang(lang: LangCode) {
-      update((d) => ({ ...d, session: { ...d.session, lang } }));
+      update((d) => {
+        const next = { ...d, session: { ...d.session, lang } };
+        // keep the signed-in person's stored language in step with the UI
+        if (d.session.role === 'worker' && d.session.id) {
+          next.workers = d.workers.map((w) => (w.id === d.session.id ? { ...w, lang } : w));
+        } else if (d.session.id) {
+          next.clients = d.clients.map((c) => (c.id === d.session.id ? { ...c, lang } : c));
+        }
+        return next;
+      });
     },
 
     logout() {
       update((d) => ({ ...d, session: { role: null, id: null, lang: d.session.lang } }));
     },
 
-    /** Resident sign-in. Creates the account on first login. */
-    loginResident(phone: string, lang: LangCode, name?: string): string {
-      const existing = db.residents.find((r) => r.phone === phone);
+    /** One-tap sign-in for judges and evaluators. */
+    loginDemo(role: Role): string | null {
+      const acc = DEMO_ACCOUNTS.find((a) => a.role === role);
+      if (!acc) return null;
+      const lang = role === 'worker'
+        ? db.workers.find((w) => w.id === acc.id)?.lang ?? 'en'
+        : db.clients.find((c) => c.id === acc.id)?.lang ?? 'en';
+      update((d) => ({ ...d, session: { role, id: acc.id, lang, demo: true } }));
+      return acc.id;
+    },
+
+    loginClient(role: Exclude<Role, 'worker'>, phone: string, lang: LangCode, name: string, orgName?: string): string {
+      const existing = db.clients.find((c) => c.phone === phone);
       if (existing) {
         update((d) => ({
           ...d,
-          session: { role: 'resident', id: existing.id, lang },
-          residents: d.residents.map((r) => (r.id === existing.id ? { ...r, lang } : r)),
+          clients: d.clients.map((c) => (c.id === existing.id ? { ...c, lang } : c)),
+          session: { role: existing.role, id: existing.id, lang },
         }));
         return existing.id;
       }
-      const id = newId('r');
-      const resident: Resident = {
-        id,
-        name: name?.trim() || 'Resident',
-        phone,
-        lang,
-        geo: db.residents[0]?.geo ?? { lat: 12.9352, lng: 77.6245, areaName: 'Koramangala, Bengaluru' },
+      const id = newId(role[0]);
+      const client: Client = {
+        id, role, name: name.trim() || 'User', phone, lang,
+        orgName: orgName?.trim() || undefined,
+        geo: db.clients[0]?.geo ?? { lat: 12.9352, lng: 77.6245, areaName: 'Koramangala, Bengaluru' },
         createdAt: Date.now(),
       };
-      update((d) => ({
-        ...d,
-        residents: [...d.residents, resident],
-        session: { role: 'resident', id, lang },
-      }));
-      return id;
-    },
-
-    setResidentGeo(residentId: string, geo: Resident['geo']) {
-      update((d) => ({
-        ...d,
-        residents: d.residents.map((r) => (r.id === residentId ? { ...r, geo } : r)),
-      }));
-    },
-
-    /** Worker sign-up at the end of onboarding. */
-    registerWorker(w: Omit<Worker, 'id' | 'jobsDone' | 'trust' | 'createdAt'>): string {
-      const existing = db.workers.find((x) => x.phone === w.phone);
-      const id = existing?.id ?? newId('w');
-      const worker: Worker = {
-        ...w,
-        id,
-        jobsDone: existing?.jobsDone ?? 0,
-        trust: existing?.trust ?? computeTrust([]),
-        createdAt: existing?.createdAt ?? Date.now(),
-      };
-      update((d) => ({
-        ...d,
-        workers: existing
-          ? d.workers.map((x) => (x.id === id ? worker : x))
-          : [...d.workers, worker],
-        session: { role: 'worker', id, lang: w.lang },
-      }));
+      update((d) => ({ ...d, clients: [...d.clients, client], session: { role, id, lang } }));
       return id;
     },
 
@@ -172,109 +140,103 @@ export function useActions() {
       return existing.id;
     },
 
-    updateWorker(id: string, patch: Partial<Worker>) {
+    registerWorker(w: Omit<Worker, 'id' | 'jobsCompleted' | 'rating' | 'reviewCount' | 'responseMins' | 'createdAt'>): string {
+      const existing = db.workers.find((x) => x.phone === w.phone);
+      const id = existing?.id ?? newId('w');
+      const worker: Worker = {
+        ...w, id,
+        jobsCompleted: existing?.jobsCompleted ?? 0,
+        rating: existing?.rating ?? 0,
+        reviewCount: existing?.reviewCount ?? 0,
+        responseMins: existing?.responseMins ?? 15,
+        createdAt: existing?.createdAt ?? Date.now(),
+      };
       update((d) => ({
         ...d,
-        workers: d.workers.map((w) => (w.id === id ? { ...w, ...patch } : w)),
+        workers: existing ? d.workers.map((x) => (x.id === id ? worker : x)) : [...d.workers, worker],
+        session: { role: 'worker', id, lang: w.lang },
       }));
-    },
-
-    postJob(job: Omit<Job, 'id' | 'status' | 'createdAt'>): string {
-      const id = newId('j');
-      const full: Job = { ...job, id, status: 'open', createdAt: Date.now() };
-      update((d) => ({ ...d, jobs: [full, ...d.jobs] }));
       return id;
     },
 
-    addQuote(jobId: string, workerId: string, amount: number, note: string) {
-      const q: Quote = { id: newId('q'), jobId, workerId, amount, note, createdAt: Date.now() };
-      update((d) => ({
-        ...d,
-        quotes: [...d.quotes.filter((x) => !(x.jobId === jobId && x.workerId === workerId)), q],
-      }));
+    updateWorker(id: string, patch: Partial<Worker>) {
+      update((d) => ({ ...d, workers: d.workers.map((w) => (w.id === id ? { ...w, ...patch } : w)) }));
+    },
+
+    setVerification(workerId: string, verification: Verification) {
+      update((d) => ({ ...d, workers: d.workers.map((w) => (w.id === workerId ? { ...w, verification } : w)) }));
+    },
+
+    updateClient(id: string, patch: Partial<Client>) {
+      update((d) => ({ ...d, clients: d.clients.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+    },
+
+    postJob(job: Omit<Job, 'id' | 'createdAt'>): string {
+      const id = newId('j');
+      update((d) => ({ ...d, jobs: [{ ...job, id, createdAt: Date.now() }, ...d.jobs] }));
+      return id;
+    },
+
+    updateJob(id: string, patch: Partial<Job>) {
+      update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, ...patch } : j)) }));
     },
 
     hire(jobId: string, workerId: string, amount: number) {
       update((d) => ({
         ...d,
-        jobs: d.jobs.map((j) =>
-          j.id === jobId
-            ? { ...j, status: 'assigned', assignedWorkerId: workerId, agreedAmount: amount, paymentStatus: 'pending' }
-            : j
-        ),
+        jobs: d.jobs.map((j) => (j.id === jobId
+          ? { ...j, status: 'assigned' as JobStatus, assignedWorkerId: workerId, agreedAmount: amount, paymentStatus: 'pending' as const }
+          : j)),
       }));
     },
 
-    workerMarkDone(jobId: string) {
-      update((d) => ({
-        ...d,
-        jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: 'worker_done' } : j)),
-      }));
-    },
-
-    confirmDone(jobId: string) {
-      update((d) => ({
-        ...d,
-        jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: 'completed' } : j)),
-      }));
+    setStatus(jobId: string, status: JobStatus) {
+      update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status } : j)) }));
     },
 
     setPayment(jobId: string, method: PaymentMethod, paid: boolean) {
       update((d) => ({
         ...d,
-        jobs: d.jobs.map((j) =>
-          j.id === jobId ? { ...j, paymentMethod: method, paymentStatus: paid ? 'paid' : 'pending' } : j
-        ),
+        jobs: d.jobs.map((j) => (j.id === jobId
+          ? { ...j, paymentMethod: method, paymentStatus: paid ? 'paid' as const : 'pending' as const }
+          : j)),
       }));
     },
 
-    submitReview(jobId: string, workerId: string, r: Omit<Review, 'id' | 'jobId' | 'workerId' | 'createdAt'>) {
-      const review: Review = { id: newId('rev'), jobId, workerId, createdAt: Date.now(), ...r };
+    /**
+     * kind 'quick' stores an i18n KEY rather than text, so the person reading
+     * it sees it in their own language with no translation step at all.
+     */
+    sendMessage(jobId: string, fromRole: 'worker' | 'client', fromId: string, kind: MessageKind, text: string, lang: LangCode, durationSec?: number) {
+      const m: Message = { id: newId('m'), jobId, fromRole, fromId, kind, text, lang, durationSec, createdAt: Date.now() };
+      update((d) => ({ ...d, messages: [...d.messages, m] }));
+    },
+
+    addReview(jobId: string, workerId: string, authorName: string, stars: number, text: string, tags: string[]) {
+      const review: Review = { id: newId('rv'), jobId, workerId, authorName, stars, text, tags, createdAt: Date.now() };
       update((d) => {
-        const reviews = [...d.reviews.filter((x) => x.jobId !== jobId), review];
-        const forWorker = reviews.filter((x) => x.workerId === workerId);
+        const all = [...d.reviews.filter((r) => r.jobId !== jobId), review];
+        const mine = all.filter((r) => r.workerId === workerId);
+        const avg = mine.reduce((s, r) => s + r.stars, 0) / mine.length;
         return {
           ...d,
-          reviews,
-          workers: d.workers.map((w) =>
-            w.id === workerId
-              ? {
-                  ...w,
-                  // seeded workers already carry historical ratings; blend the
-                  // new review in rather than wiping their history
-                  trust: blendTrust(w, forWorker.length, computeTrust(forWorker)),
-                  jobsDone: w.jobsDone + 1,
-                }
-              : w
-          ),
+          reviews: all,
+          workers: d.workers.map((w) => (w.id === workerId
+            ? { ...w, rating: Math.round(avg * 10) / 10, reviewCount: mine.length, jobsCompleted: w.jobsCompleted + 1 }
+            : w)),
         };
       });
     },
 
-    sendMessage(jobId: string, fromRole: 'worker' | 'resident', fromId: string, text: string, lang: LangCode) {
-      const m: Message = { id: newId('m'), jobId, fromRole, fromId, text, lang, createdAt: Date.now() };
-      update((d) => ({ ...d, messages: [...d.messages, m] }));
+    raiseSos(jobId: string, by: 'worker' | 'client', lat?: number, lng?: number): SosEvent {
+      const ev: SosEvent = { id: newId('sos'), jobId, at: Date.now(), by, lat, lng, resolved: false };
+      update((d) => ({ ...d, sos: [...d.sos, ev] }));
+      return ev;
     },
   }), [db, update, reset]);
 }
 
-function blendTrust(w: Worker, newCount: number, fresh: ReturnType<typeof computeTrust>) {
-  const oldCount = w.trust.reviewCount;
-  if (oldCount === 0) return fresh;
-  const total = oldCount + 1;
-  const mix = (a: number, b: number) => Math.round(((a * oldCount + b) / total) * 10) / 10;
-  return {
-    reliability: mix(w.trust.reliability, fresh.reliability),
-    skillQuality: mix(w.trust.skillQuality, fresh.skillQuality),
-    professionalism: mix(w.trust.professionalism, fresh.professionalism),
-    overall: mix(w.trust.overall, fresh.overall),
-    reviewCount: total,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Selectors
-// ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------- selectors */
 
 export function useCurrentWorker(): Worker | null {
   const { db } = useStore();
@@ -282,8 +244,25 @@ export function useCurrentWorker(): Worker | null {
   return db.workers.find((w) => w.id === db.session.id) ?? null;
 }
 
-export function useCurrentResident(): Resident | null {
+export function useCurrentClient(): Client | null {
   const { db } = useStore();
-  if (db.session.role !== 'resident' || !db.session.id) return null;
-  return db.residents.find((r) => r.id === db.session.id) ?? null;
+  const { role, id } = db.session;
+  if (!id || role === 'worker' || !role) return null;
+  return db.clients.find((c) => c.id === id) ?? null;
+}
+
+/** Whoever is signed in, plus their location — used by every screen. */
+export function useMe() {
+  const { db } = useStore();
+  const worker = useCurrentWorker();
+  const client = useCurrentClient();
+  const geo = worker?.geo ?? client?.geo ?? db.clients[0]?.geo ?? db.workers[0].geo;
+  return {
+    role: db.session.role,
+    id: db.session.id,
+    demo: !!db.session.demo,
+    worker, client, geo,
+    name: worker?.name ?? client?.name ?? '',
+    phone: worker?.phone ?? client?.phone ?? '',
+  };
 }

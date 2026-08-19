@@ -1,57 +1,40 @@
-import type { CategoryId, Urgency } from '../types';
-import { categoryById } from './taxonomy';
+import type { Urgency } from '../types';
+import { service } from '../catalog';
 
-export interface PriceSuggestion {
-  min: number;
-  max: number;
-  basis: string;
-}
+export interface PriceSuggestion { min: number; max: number; basis: string }
 
-const URGENCY_MULTIPLIER: Record<Urgency, number> = {
-  emergency: 1.4,
-  today: 1.15,
-  this_week: 1.0,
-  flexible: 0.95,
+const URGENCY_MULT: Record<Urgency, number> = {
+  emergency: 1.4, today: 1.15, this_week: 1.0, flexible: 0.95,
 };
 
 /**
- * AI FEATURE #6 - Unified / fair pricing.
- * Phase 1 uses a transparent rate card. Phase 2 can feed real completed-job
- * history into Claude and ask for a calibrated range - same return shape.
+ * A transparent rate card, not a black box. Every number on screen can be
+ * traced to a line in lib/catalog.ts, which matters when a worker asks why
+ * the app suggested what it did.
  */
 export async function suggestPrice(
-  category: CategoryId,
+  serviceId: string | undefined,
   urgency: Urgency,
-  estimatedHours: number,
-  historyAverage?: number
+  hours: number,
+  localAverage?: number
 ): Promise<PriceSuggestion> {
-  const def = categoryById(category);
-  const hours = Math.max(1, estimatedHours);
-  let mid = def.baseRate + def.hourlyRate * (hours - 1);
-  mid *= URGENCY_MULTIPLIER[urgency];
+  const s = serviceId ? service(serviceId) : undefined;
+  const base = s?.base ?? 300;
+  const hourly = s?.hourly ?? 220;
+  const h = Math.max(1, hours);
 
-  // Blend in what similar jobs actually settled at, when we have that data.
-  if (historyAverage && historyAverage > 0) {
-    mid = mid * 0.6 + historyAverage * 0.4;
-  }
-
-  const min = roundTo(mid * 0.85, 10);
-  const max = roundTo(mid * 1.2, 10);
+  let mid = base + hourly * (h - 1);
+  mid *= URGENCY_MULT[urgency];
+  if (localAverage && localAverage > 0) mid = mid * 0.6 + localAverage * 0.4;
 
   const bits = [
-    `${def.id.replace('_', ' ')} base rate`,
-    `${hours} hour${hours === 1 ? '' : 's'} of work`,
-    urgency === 'emergency'
-      ? 'emergency call-out'
-      : urgency === 'today'
-      ? 'same-day visit'
-      : 'no rush',
+    'standard rate',
+    `${h} hour${h === 1 ? '' : 's'}`,
+    urgency === 'emergency' ? 'emergency call-out' : urgency === 'today' ? 'same day' : 'no rush',
   ];
-  if (historyAverage) bits.push('recent local jobs');
+  if (localAverage) bits.push('recent local jobs');
 
-  return { min, max, basis: bits.join(' • ') };
+  return { min: round(mid * 0.85), max: round(mid * 1.2), basis: bits.join(' · ') };
 }
 
-function roundTo(n: number, step: number) {
-  return Math.max(step, Math.round(n / step) * step);
-}
+const round = (n: number) => Math.max(10, Math.round(n / 10) * 10);
