@@ -9,6 +9,12 @@
 layer stubbed behind clean interfaces. Phase 2: swap the stubs for real Claude
 calls — no UI code changes.**
 
+**Design: [Aurora](./DESIGN.md)** — layered glass, gradient mesh, adaptive dark
+mode, spring motion. Three screens are fully rebuilt on it (`/`,
+`/worker/onboarding`, `/discover`) plus `/leaderboard`; the rest run on a
+compatibility bridge and inherit the new palette and dark mode until they are
+migrated.
+
 ---
 
 ## Run it
@@ -46,7 +52,9 @@ browser's localStorage. "Reset demo" on the home page restores it.
 |---|---|
 | `/` | Language + role chooser |
 | `/join` | QR-code landing page (posters point here) |
-| `/worker/onboarding` | 6-step voice sign-up |
+| `/worker/onboarding` | **Conversational AI sign-up** — the AI asks, you speak |
+| `/discover` | **Smart worker marketplace** — match rings, tiers, ETA, live availability |
+| `/leaderboard` | **Community ranks** — Bronze → Community hero |
 | `/worker` | Ranked jobs near me |
 | `/worker/mine` | Hired jobs + sent quotes |
 | `/worker/profile` | Skills, trust score, radius, availability |
@@ -64,6 +72,8 @@ browser's localStorage. "Reset demo" on the home page restores it.
 ```
 app/                 Next.js App Router pages (all client components)
 components/
+  aurora.tsx         Aurora motion + surface component library
+  theme.tsx          adaptive dark mode, no flash on first paint
   store.tsx          the "API" — every read/write goes through here
   ui.tsx             design-system components
   voice.tsx          Web Speech API capture with typing fallback
@@ -74,6 +84,8 @@ lib/
   geo.ts             haversine distance + hyperlocal priority bands
   i18n.ts            en / hi / ta / te / ml / kn dictionaries
   seed.ts            14 workers, 2 residents, 3 open jobs
+  tiers.ts           trust tiers, streaks, endorsements, leaderboard, ETA
+  activity.ts        deterministic live-activity feed
   selftest.ts        npm run test
   ai/
     taxonomy.ts      trades, multilingual keywords, rate card

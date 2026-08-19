@@ -12,6 +12,8 @@ import { seedDB } from './seed';
 import * as ai from './ai';
 import { t } from './i18n';
 import { distanceKm, formatKm } from './geo';
+import { tierOf, nextTier, tierProgress, tierGap, leaderboard, etaMinutes, streakDays, endorsementsFor } from './tiers';
+import { buildActivity } from './activity';
 
 (async () => {
   const db = seedDB();
@@ -98,6 +100,32 @@ import { distanceKm, formatKm } from './geo';
   // 9. geo
   ok('distance Koramangala->HSR ~ 3-6km', (()=>{const d=distanceKm({lat:12.9352,lng:77.6245},{lat:12.9121,lng:77.6446}); return d>2 && d<6;})(),
      formatKm(distanceKm({lat:12.9352,lng:77.6245},{lat:12.9121,lng:77.6446})));
+
+  // 10. trust tiers, streaks, endorsements, leaderboard
+  const ram = db.workers.find(w => w.id === 'w1');
+  const hero = db.workers.find(w => w.id === 'w9');
+  ok('47 jobs @4.8 -> Gold', tierOf(ram).id === 'gold', tierOf(ram).label);
+  ok('brand new worker -> Bronze', tierOf({ jobsDone: 0, trust: { overall: 0, reviewCount: 0 } }).id === 'bronze');
+  ok('210 jobs @4.9 -> Community hero', tierOf(hero).id === 'hero');
+  ok('top tier has no next rung', nextTier(hero) === null);
+  ok('tier progress within 0-100', tierProgress(ram) >= 0 && tierProgress(ram) <= 100, tierProgress(ram) + '%');
+  ok('tier gap is human readable', typeof tierGap(ram) === 'string', tierGap(ram));
+  ok('endorsements earned', endorsementsFor(ram).length > 0, endorsementsFor(ram).map(e => e.label).join(', '));
+
+  const lb = leaderboard(db.workers);
+  ok('leaderboard ranks descending', lb[0].rank === 1 && lb.every((r, i) => i === 0 || lb[i - 1].points >= r.points),
+     `top=${lb[0].worker.name} ${lb[0].points}pts`);
+  ok('leaderboard filters by area', leaderboard(db.workers, 'HSR Layout, Bengaluru').every(r => r.worker.geo.areaName.includes('HSR')));
+
+  const DAY = 86400000, T = 1700000000000;
+  ok('streak counts consecutive days', streakDays([T, T - DAY, T - 2 * DAY]) === 3);
+  ok('streak breaks on a gap', streakDays([T, T - 3 * DAY]) === 1);
+  ok('eta grows with distance', etaMinutes(0.4) < etaMinutes(3.4), `${etaMinutes(0.4)}min vs ${etaMinutes(3.4)}min`);
+
+  const act = buildActivity(db, 10);
+  ok('activity feed builds', act.length === 10 && act[0].line.length > 0, `"${act[0].line}"`);
+  ok('activity feed is deterministic', JSON.stringify(buildActivity(db, 10)) === JSON.stringify(buildActivity(db, 10)));
+  ok('no broken articles in feed copy', act.every(a => !/\ba (?:e|a|i|o|u)/i.test(a.line)));
 
   console.log(fails === 0 ? '\n🎉 ALL CHECKS PASSED' : `\n⚠️  ${fails} CHECK(S) FAILED`);
   process.exit(fails ? 1 : 0);
