@@ -19,7 +19,8 @@ import { isValidAadhaarFormat, verifyIdentity } from './verify';
 import { PAYMENT_METHODS, EMPTY_PAYMENT, createOrder, holdFunds, releaseFunds, refund, methodInfo, statusKey } from './payments';
 import { cancelTerms, canCancel, travelFee, POLICY_ROWS } from './cancellation';
 import { telLink, waLink, navigateLink, sosMessage, e164, workerShareText } from './links';
-import { distanceKm, formatKm, AREAS } from './geo';
+import { distanceKm, formatKm, formatDistance } from './geo';
+import { CITIES, ALL_LOCALITIES, geoOf } from './cities';
 import {
   DAY_KEYS, crossesMidnight, hoursPerWeek, isValidShift, monthlyCost,
   nextOccurrence, shiftHours, shiftSummary, totalHours, type ShiftPattern,
@@ -320,7 +321,7 @@ const en = (k: any) => t('en', k);
   /* ==================================================== 10d. MAP PROJECTION */
   section('Map and live tracking');
   {
-    const kora = AREAS[0], hsr = AREAS[1];
+    const kora = geoOf('blr_koramangala')!, hsr = geoOf('blr_hsr')!;
 
     /* Web Mercator sanity: further east is further right, further north is further up */
     const a = project(kora.lat, kora.lng, 13);
@@ -353,6 +354,71 @@ const en = (k: any) => t('en', k);
     const mid = lerpGeo(kora, hsr, 0.5);
     ok('the halfway point is between the two ends',
        mid.lat < kora.lat && mid.lat > hsr.lat, `${mid.lat.toFixed(4)}`);
+  }
+
+  /* ============================== 10e. GEOGRAPHY — the "0 m away" regression */
+  section('Places and distance');
+  {
+    ok('the app covers more than one city', CITIES.length >= 10, `${CITIES.length} cities`);
+    ok('every city has localities', CITIES.every((c) => c.localities.length >= 6));
+    ok('every locality id is unique',
+       new Set(ALL_LOCALITIES.map((l) => l.id)).size === ALL_LOCALITIES.length);
+
+    /* THE BUG: every entity used to sit on a locality centroid, so a worker and
+       a job in the same area were 0.000 km apart and the feed printed "0 m". */
+    let zero = 0;
+    for (const j of db.jobs) for (const w of db.workers) if (distanceKm(j.geo, w.geo) === 0) zero++;
+    ok('no worker is at exactly zero distance from a job', zero === 0, `${zero} collisions`);
+
+    const points = new Set(db.workers.map((w) => `${w.geo.lat},${w.geo.lng}`));
+    ok('no two workers share a coordinate', points.size === db.workers.length,
+       `${points.size}/${db.workers.length}`);
+
+    ok('distance never renders as zero', formatDistance(0) === 'nearby', formatDistance(0));
+    ok('a real distance still renders as a distance', formatDistance(2.34) === '2.3 km', formatDistance(2.34));
+    ok('sub-kilometre reads in metres', formatDistance(0.48) === '480 m', formatDistance(0.48));
+
+    ok('every worker knows which city they are in', db.workers.every((w) => !!w.geo.cityId));
+    ok('every job knows which city it is in', db.jobs.every((j) => !!j.geo.cityId));
+
+    /* multi-city means every city has a marketplace, not just a name */
+    const thin = CITIES.filter((c) => db.workers.filter((w) => w.geo.cityId === c.id).length < 6);
+    ok('every city has workers in it', thin.length === 0,
+       thin.length ? thin.map((c) => c.name).join(', ') : `${CITIES.length} cities staffed`);
+
+    /* and that a search in one city cannot return another city's workers */
+    const blrJob = { geo: geoOf('blr_koramangala')!, category: 'electrical' as const, serviceId: 'fan_repair' };
+    const hits = rankWorkers(blrJob, db.workers);
+    ok('a search returns local workers only',
+       hits.every((m) => m.geo?.cityId === undefined || m.worker.geo.cityId === 'blr'),
+       `${hits.length} hits, all Bengaluru`);
+    ok('a city search actually finds somebody', hits.length > 0, `${hits.length}`);
+  }
+
+  /* ================== 10f. TRADE MATCHING — an electrician sees electrical work */
+  section('Workers only see their own trade');
+  {
+    const trades = ['electrical', 'plumbing', 'cleaning', 'domestic', 'carpentry'] as const;
+    for (const trade of trades) {
+      const w = db.workers.find((x) => x.category === trade);
+      if (!w) continue;
+      const visible = db.jobs.filter((j) =>
+        rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]).length > 0);
+      ok(`a ${trade} worker is never shown another trade`,
+         visible.every((j) => j.category === trade),
+         visible.length ? visible.map((j) => j.category).join(',') : 'no jobs in range');
+    }
+
+    /* the specific complaint: an electrician receiving cooking and cleaning */
+    const elec = db.workers.find((x) => x.id === 'w_demo')!;
+    const cooking = db.jobs.find((j) => j.category === 'domestic' || j.category === 'cleaning');
+    ok('the demo electrician cannot be offered a cleaning job',
+       !cooking || rankWorkers({ geo: cooking.geo, category: cooking.category, serviceId: cooking.serviceId }, [elec]).length === 0);
+    ok('a worker is never offered a service they did not list',
+       db.workers.every((w) => db.jobs.every((j) => {
+         const shown = rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]).length > 0;
+         return !shown || !j.serviceId || w.services.includes(j.serviceId);
+       })));
   }
 
   /* ==================================================== 11. PAYMENTS */

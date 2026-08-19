@@ -7,7 +7,7 @@ import { CATEGORIES, servicesOf, type CategoryId } from '@/lib/catalog';
 import { categoryName, serviceName } from '@/lib/i18n-catalog';
 import { rankWorkers, etaMinutes } from '@/lib/ai/match';
 import { suggestPrice } from '@/lib/ai/pricing';
-import { formatKm } from '@/lib/geo';
+import { formatDistance } from '@/lib/geo';
 import { useMe, useStore, useT } from '@/components/store';
 import { CardSkeleton, Dock, GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
 import { Empty, HeaderTools, Initials, Money, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
@@ -77,7 +77,7 @@ function SearchInner() {
       <Shell>
         <TopBar glassy title={categoryName(cat, lang)} subtitle={t('s.pickService')} back="/search" right={<HeaderTools />} />
         <main className="page">
-          <Stagger className="v-3" gap={0.05}>
+          <Stagger className="v-3 grid-cards" gap={0.05}>
             {servicesOf(cat).map((s) => {
               const n = db.workers.filter((w) => w.services.includes(s.id)).length;
               return (
@@ -154,7 +154,7 @@ function SearchInner() {
             ]}
           />
         ) : (
-          <Stagger className="v-4" gap={0.06}>
+          <Stagger className="v-4 grid-cards" gap={0.06}>
             {shown.map((m) => (
               <StaggerItem key={m.worker.id}>
                 <Link href={`/worker/${m.worker.id}?svc=${svc}`} style={{ display: 'block' }}>
@@ -162,7 +162,7 @@ function SearchInner() {
                     <div className="h" style={{ gap: 13 }}>
                       <Initials name={m.worker.name} />
                       <div className="grow" style={{ minWidth: 0 }}>
-                        <h3 className="t-h3" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <h3 className="t-h3 clamp-2">
                           {m.worker.name}
                         </h3>
                         <div style={{ marginTop: 4 }}>
@@ -186,7 +186,7 @@ function SearchInner() {
                       <div className="h-2" style={{ gap: 16 }}>
                         <div>
                           <div className="t-xs">{t('w.away')}</div>
-                          <div className="t-sm strong t-num">{formatKm(m.km)}</div>
+                          <div className="t-sm strong t-num">{formatDistance(m.km, t('c.nearby'))}</div>
                         </div>
                         <div>
                           <div className="t-xs">{t('j.eta')}</div>

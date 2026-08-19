@@ -1,4 +1,5 @@
 import type { Geo } from './types';
+import { ALL_LOCALITIES, cityOfLocality, geoOf } from './cities';
 
 /** Great-circle distance between two points, in km. */
 export function distanceKm(a: Geo, b: Geo): number {
@@ -26,28 +27,54 @@ export function formatKm(km: number): string {
   return `${km.toFixed(1)} km`;
 }
 
-/** Demo localities. Swap for a real geocoder (Google/Mapbox/Ola Maps) later. */
+/**
+ * Kept as a compatibility shim.
+ *
+ * AREAS used to be the entire geography of the product: six hard-coded
+ * Bengaluru points that every worker and job shared, which is what produced
+ * "0 m away". Real places now live in lib/cities.ts. These stay only so that
+ * older references keep resolving, and they resolve to the same localities.
+ */
 export const AREAS: Geo[] = [
-  { areaName: 'Koramangala, Bengaluru', lat: 12.9352, lng: 77.6245 },
-  { areaName: 'HSR Layout, Bengaluru', lat: 12.9121, lng: 77.6446 },
-  { areaName: 'Indiranagar, Bengaluru', lat: 12.9784, lng: 77.6408 },
-  { areaName: 'BTM Layout, Bengaluru', lat: 12.9166, lng: 77.6101 },
-  { areaName: 'Jayanagar, Bengaluru', lat: 12.9250, lng: 77.5938 },
-  { areaName: 'Whitefield, Bengaluru', lat: 12.9698, lng: 77.7500 },
+  geoOf('blr_koramangala')!,
+  geoOf('blr_hsr')!,
+  geoOf('blr_indiranagar')!,
+  geoOf('blr_btm')!,
+  geoOf('blr_jayanagar')!,
+  geoOf('blr_whitefield')!,
 ];
 
-/** Nearest known locality to a raw lat/lng - stands in for reverse geocoding. */
+/**
+ * Reverse geocoding, near enough for a demo: the closest known locality out of
+ * every city we cover. A real deployment swaps this for a geocoding call — the
+ * signature does not change.
+ */
 export function nearestArea(lat: number, lng: number): Geo {
-  let best = AREAS[0];
+  let best = ALL_LOCALITIES[0];
   let bestD = Infinity;
-  for (const a of AREAS) {
-    const d = distanceKm({ lat, lng, areaName: '' }, a);
-    if (d < bestD) {
-      bestD = d;
-      best = a;
-    }
+  for (const l of ALL_LOCALITIES) {
+    const d = distanceKm({ lat, lng, areaName: '' }, { lat: l.lat, lng: l.lng, areaName: '' });
+    if (d < bestD) { bestD = d; best = l; }
   }
-  return { lat, lng, areaName: best.areaName };
+  const c = cityOfLocality(best.id);
+  return {
+    lat, lng,
+    areaName: c ? `${best.name}, ${c.name}` : best.name,
+    localityId: best.id,
+    cityId: c?.id,
+  };
+}
+
+/**
+ * How far apart two points are, for display.
+ *
+ * Guards the "0 m away" bug at the render boundary as well as at the data
+ * layer: if two entities really do land on the same point, say "nearby"
+ * rather than printing a distance no physical world produces.
+ */
+export function formatDistance(km: number, nearbyLabel = 'nearby'): string {
+  if (!isFinite(km) || km < 0.05) return nearbyLabel;
+  return formatKm(km);
 }
 
 function toRad(deg: number): number {

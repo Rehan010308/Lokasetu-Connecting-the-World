@@ -29,12 +29,20 @@ export function rankWorkers(
   const out: Match[] = [];
 
   for (const w of workers) {
-    // Hard filter: a worker only ever appears under a service they actually do.
-    if (job.serviceId) {
-      if (!w.services.includes(job.serviceId)) continue;
-    } else if (w.category !== job.category) {
-      continue;
-    }
+    /* HARD TRADE FILTER — both halves matter.
+       A worker only ever appears under a service they actually listed, AND
+       only ever inside their own category. Checking the service alone was
+       already enough in practice, but the category check makes the rule
+       impossible to break by adding a service id to the wrong category in the
+       catalogue later. An electrician cannot be shown a cooking job by any
+       route through this function. */
+    if (w.category !== job.category) continue;
+    if (job.serviceId && !w.services.includes(job.serviceId)) continue;
+
+    /* Different city, different marketplace. Radius alone nearly always
+       catches this, but an explicit check means a locality that happens to sit
+       near a boundary can never leak a worker who cannot realistically come. */
+    if (job.geo.cityId && w.geo.cityId && job.geo.cityId !== w.geo.cityId) continue;
 
     const km = distanceKm(job.geo, w.geo);
     if (km > w.radiusKm) continue;

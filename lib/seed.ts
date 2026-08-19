@@ -1,6 +1,12 @@
 import type { Client, DB, Job, Message, MessageKind, Quote, Review, SosEvent, Worker } from './types';
 import { EMPTY_PAYMENT } from './payments';
-import { AREAS } from './geo';
+import { CITIES, scatter, locality } from './cities';
+
+/** A real address inside a locality — never the locality centroid itself. */
+const at = (localityId: string, seed: string, address?: string) => ({
+  ...scatter(locality(localityId)!, seed),
+  ...(address ? { address } : {}),
+});
 
 const T = 1735689600000; // fixed epoch so server and client render identically
 const day = 86400000;
@@ -10,140 +16,223 @@ const ver = (last4: string, name: string) =>
 
 function w(
   id: string, name: string, phone: string, lang: Worker['lang'], languages: Worker['languages'],
-  category: Worker['category'], services: string[], years: number, area: number,
+  category: Worker['category'], services: string[], years: number, area: string,
   radius: number, avail: Worker['availability'], jobs: number, rating: number, reviews: number,
   respond: number, verification: Worker['verification'], speech: string, bio: string
 ): Worker {
   return {
     id, name, phone, lang, languages, category, services,
     experienceYears: years, rawSpeech: speech, bio,
-    geo: AREAS[area], radiusKm: radius, availability: avail,
+    geo: at(area, id), radiusKm: radius, availability: avail,
     jobsCompleted: jobs, rating, reviewCount: reviews, responseMins: respond,
     verification, emergencyContact: '9000000099', createdAt: T - 200 * day,
   };
 }
 
-const workers: Worker[] = [
+const bengaluruWorkers: Worker[] = [
   /* ---- DEMO ACCOUNT ---- */
   w('w_demo', 'Ramesh Kumar', '9000000001', 'hi', ['hi', 'en'], 'electrical',
-    ['fan_repair', 'wiring', 'inverter', 'switchboard'], 6, 0, 5, 'anytime', 47, 4.8, 31, 6,
+    ['fan_repair', 'wiring', 'inverter', 'switchboard'], 6, 'blr_koramangala', 5, 'anytime', 47, 4.8, 31, 6,
     ver('4821', 'Ramesh Kumar'),
     'मैं बिजली की वायरिंग, पंखा लगाना और इन्वर्टर ठीक करता हूँ, छह साल का अनुभव है',
     'पंखा ठीक करना, वायरिंग, इन्वर्टर मरम्मत का काम करते हैं। 6 साल का अनुभव।'),
 
   w('w2', 'Suresh Patil', '9876500002', 'kn', ['kn', 'hi'], 'electrical',
-    ['switchboard', 'lighting', 'geyser'], 3, 1, 10, 'weekdays', 18, 4.2, 12, 22,
+    ['switchboard', 'lighting', 'geyser'], 3, 'blr_hsr', 10, 'weekdays', 18, 4.2, 12, 22,
     ver('7710', 'Suresh Patil'),
     'ನಾನು ಸ್ವಿಚ್ ಬೋರ್ಡ್, ಲೈಟ್ ಮತ್ತು ಗೀಸರ್ ಕೆಲಸ ಮಾಡುತ್ತೇನೆ',
     'ಸ್ವಿಚ್ ಮತ್ತು ಸಾಕೆಟ್, ಲೈಟ್ ಮತ್ತು ಬಲ್ಬ್, ಗೀಸರ್ ಅಳವಡಿಕೆ ಮಾಡುತ್ತಾರೆ. 3 ವರ್ಷಗಳ ಅನುಭವ.'),
 
   w('w3', 'Murugan S', '9876500003', 'ta', ['ta', 'en'], 'plumbing',
-    ['leak_repair', 'tap_fitting', 'tank_motor', 'pipe_work'], 9, 0, 5, 'anytime', 88, 4.9, 54, 4,
+    ['leak_repair', 'tap_fitting', 'tank_motor', 'pipe_work'], 9, 'blr_koramangala', 5, 'anytime', 88, 4.9, 54, 4,
     ver('3092', 'Murugan Selvam'),
     'நான் கசிவு பழுது, குழாய் பொருத்துதல், மோட்டார் வேலை செய்கிறேன்',
     'கசிவு பழுது, குழாய் பொருத்துதல், தொட்டி மற்றும் மோட்டார் செய்கிறார். 9 வருட அனுபவம்.'),
 
   w('w4', 'Anil Yadav', '9876500004', 'hi', ['hi'], 'plumbing',
-    ['drain_clean', 'toilet_repair', 'pipe_work'], 4, 3, 10, 'anytime', 25, 4.0, 15, 14,
+    ['drain_clean', 'toilet_repair', 'pipe_work'], 4, 'blr_btm', 10, 'anytime', 25, 4.0, 15, 14,
     { status: 'pending', method: 'simulated', checkedAt: T - 2 * day },
     'नाली साफ करना, टॉयलेट रिपेयर, पाइप लाइन का काम',
     'नाली सफाई, शौचालय मरम्मत, पाइप का काम करते हैं। 4 साल का अनुभव।'),
 
   w('w5', 'Lakshmi Devi', '9876500005', 'te', ['te', 'hi'], 'domestic',
-    ['maid', 'cook'], 7, 0, 2, 'weekdays', 132, 4.7, 61, 9,
+    ['maid', 'cook'], 7, 'blr_koramangala', 2, 'weekdays', 132, 4.7, 61, 9,
     ver('5540', 'Lakshmi Devi'),
     'నేను ఇల్లు ఊడ్చడం, పాత్రలు కడగడం, వంట చేస్తాను',
     'ఇంటి పనిమనిషి, వంటవారు పని చేస్తారు. 7 సంవత్సరాల అనుభవం.'),
 
   w('w6', 'Sunita Bai', '9876500006', 'mr', ['mr', 'hi'], 'cleaning',
-    ['home_cleaning', 'bathroom_clean', 'deep_cleaning'], 2, 1, 5, 'anytime', 9, 4.3, 6, 11,
+    ['home_cleaning', 'bathroom_clean', 'deep_cleaning'], 2, 'blr_hsr', 5, 'anytime', 9, 4.3, 6, 11,
     ver('8834', 'Sunita Bai'),
     'झाडू पोछा, बाथरूम सफाई, डीप क्लीनिंग करते',
     'घराची स्वच्छता, स्नानगृह सफाई, सखोल स्वच्छता करतात. 2 वर्षांचा अनुभव.'),
 
   w('w7', 'Joseph Mathew', '9876500007', 'ml', ['ml', 'en'], 'carpentry',
-    ['door_repair', 'cupboard', 'furniture'], 12, 2, 10, 'weekdays', 156, 4.6, 73, 18,
+    ['door_repair', 'cupboard', 'furniture'], 12, 'blr_indiranagar', 10, 'weekdays', 156, 4.6, 73, 18,
     ver('2261', 'Joseph Mathew'),
     'ഞാൻ വാതിൽ പണി, അലമാര ഫിറ്റിംഗ്, ഫർണിച്ചർ ചെയ്യും',
     'വാതിൽ റിപ്പയർ, അലമാര ഘടിപ്പിക്കൽ, ഫർണിച്ചർ ജോലി ചെയ്യുന്നു. 12 വർഷത്തെ പരിചയം.'),
 
   w('w8', 'Ravi Shankar', '9876500008', 'kn', ['kn', 'te'], 'painting',
-    ['interior_paint', 'putty_primer', 'wood_polish'], 8, 4, 10, 'anytime', 41, 4.4, 27, 25,
+    ['interior_paint', 'putty_primer', 'wood_polish'], 8, 'blr_jayanagar', 10, 'anytime', 41, 4.4, 27, 25,
     ver('9107', 'Ravi Shankar'),
     'ಒಳಾಂಗಣ ಪೇಂಟಿಂಗ್, ಪುಟ್ಟಿ ಪ್ರೈಮರ್, ಪಾಲಿಶ್ ಕೆಲಸ',
     'ಒಳಾಂಗಣ ಬಣ್ಣ, ಪುಟ್ಟಿ ಮತ್ತು ಪ್ರೈಮರ್, ಮರದ ಪಾಲಿಶ್ ಮಾಡುತ್ತಾರೆ. 8 ವರ್ಷಗಳ ಅನುಭವ.'),
 
   w('w9', 'Farida Begum', '9876500009', 'hi', ['hi', 'bn'], 'domestic',
-    ['cook', 'elder_care'], 10, 0, 5, 'anytime', 210, 4.9, 96, 5,
+    ['cook', 'elder_care'], 10, 'blr_koramangala', 5, 'anytime', 210, 4.9, 96, 5,
     ver('6673', 'Farida Begum'),
     'नॉर्थ इंडियन खाना, रोटी चपाती, बुजुर्गों की देखभाल',
     'रसोइया, बुजुर्गों की देखभाल का काम करते हैं। 10 साल का अनुभव।'),
 
   w('w10', 'Selvi R', '9876500010', 'ta', ['ta'], 'cleaning',
-    ['home_cleaning', 'sofa_carpet'], 5, 3, 5, 'today', 33, 4.5, 21, 16,
+    ['home_cleaning', 'sofa_carpet'], 5, 'blr_btm', 5, 'today', 33, 4.5, 21, 16,
     { status: 'unverified', method: 'simulated' },
     'வீட்டு சுத்தம், சோபா கம்பளம் சுத்தம் செய்கிறேன்',
     'வீட்டு சுத்தம், சோபா மற்றும் கம்பளம் செய்கிறார். 5 வருட அனுபவம்.'),
 
   w('w11', 'Imran Shaikh', '9876500011', 'hi', ['hi', 'mr'], 'appliance',
-    ['ac_service', 'fridge_repair', 'washing_machine'], 6, 1, 10, 'anytime', 64, 4.6, 38, 8,
+    ['ac_service', 'fridge_repair', 'washing_machine'], 6, 'blr_hsr', 10, 'anytime', 64, 4.6, 38, 8,
     ver('1195', 'Imran Shaikh'),
     'एसी सर्विस, फ्रिज और वॉशिंग मशीन रिपेयर करता हूँ',
     'एसी सर्विस, फ्रिज मरम्मत, वॉशिंग मशीन का काम करते हैं। 6 साल का अनुभव।'),
 
   w('w12', 'Babu Rao', '9876500012', 'te', ['te', 'hi'], 'scrap',
-    ['paper_scrap', 'metal_scrap'], 15, 0, 5, 'anytime', 380, 4.4, 44, 12,
+    ['paper_scrap', 'metal_scrap'], 15, 'blr_koramangala', 5, 'anytime', 380, 4.4, 44, 12,
     ver('4408', 'Babu Rao'),
     'పేపర్, అట్ట, ఇనుము కొంటాను, ఇంటికే వచ్చి తీసుకుంటాను',
     'పేపర్ మరియు అట్ట, లోహపు స్క్రాప్ పని చేస్తారు. 15 సంవత్సరాల అనుభవం.'),
 
   w('w13', 'Gurpreet Singh', '9876500013', 'pa', ['pa', 'hi'], 'driving',
-    ['car_driver', 'delivery'], 8, 2, 10, 'anytime', 96, 4.7, 52, 7,
+    ['car_driver', 'delivery'], 8, 'blr_indiranagar', 10, 'anytime', 96, 4.7, 52, 7,
     ver('3327', 'Gurpreet Singh'),
     'ਮੈਂ ਕਾਰ ਚਲਾਉਂਦਾ ਹਾਂ ਤੇ ਡਿਲਿਵਰੀ ਵੀ ਕਰਦਾ ਹਾਂ, ਅੱਠ ਸਾਲ ਦਾ ਤਜਰਬਾ',
     'ਕਾਰ ਡਰਾਈਵਰ, ਡਿਲਿਵਰੀ ਦਾ ਕੰਮ ਕਰਦੇ ਹਨ। 8 ਸਾਲ ਦਾ ਤਜਰਬਾ।'),
 
   w('w14', 'Bimal Das', '9876500014', 'bn', ['bn', 'hi'], 'security',
-    ['security_guard', 'night_watch'], 11, 1, 10, 'anytime', 74, 4.5, 33, 20,
+    ['security_guard', 'night_watch'], 11, 'blr_hsr', 10, 'anytime', 74, 4.5, 33, 20,
     ver('7752', 'Bimal Das'),
     'আমি নিরাপত্তা রক্ষীর কাজ করি, রাতের ডিউটিও করি',
     'নিরাপত্তা রক্ষী, রাতের প্রহরী কাজ করেন। 11 বছরের অভিজ্ঞতা।'),
 
   w('w15', 'Kiran Patel', '9876500015', 'gu', ['gu', 'hi'], 'gardening',
-    ['gardener', 'tree_trim'], 5, 4, 5, 'weekdays', 28, 4.3, 17, 30,
+    ['gardener', 'tree_trim'], 5, 'blr_jayanagar', 5, 'weekdays', 28, 4.3, 17, 30,
     { status: 'failed', method: 'simulated', checkedAt: T - 5 * day, failureReason: 'checksum' },
     'હું બાગકામ અને વૃક્ષ કાપણીનું કામ કરું છું',
     'માળી, વૃક્ષ કાપણી નું કામ કરે છે. 5 વર્ષનો અનુભવ.'),
 
   w('w16', 'Mohan Lal', '9876500016', 'hi', ['hi'], 'maintenance',
-    ['society_clean', 'water_tank_clean'], 9, 0, 10, 'weekdays', 58, 4.6, 29, 15,
+    ['society_clean', 'water_tank_clean'], 9, 'blr_koramangala', 10, 'weekdays', 58, 4.6, 29, 15,
     ver('5583', 'Mohan Lal'),
     'सोसाइटी की सफाई और पानी की टंकी सफाई करता हूँ',
     'सामान्य क्षेत्र सफाई, पानी की टंकी सफाई करते हैं। 9 साल का अनुभव।'),
 
   w('w17', 'Deepak Verma', '9876500017', 'hi', ['hi', 'en'], 'shop',
-    ['shop_assistant', 'stock_help'], 3, 3, 5, 'anytime', 21, 4.1, 11, 13,
+    ['shop_assistant', 'stock_help'], 3, 'blr_btm', 5, 'anytime', 21, 4.1, 11, 13,
     ver('9940', 'Deepak Verma'),
     'दुकान में काउंटर और सामान की व्यवस्था का काम करता हूँ',
     'दुकान सहायक, सामान व्यवस्था का काम करते हैं। 3 साल का अनुभव।'),
 ];
 
+/* ------------------------------------------------- workers in the other cities
+
+   Seventeen hand-written workers all live in Bengaluru, which is fine for the
+   demo accounts but makes "switch city" an empty screen — the exact criticism
+   the multi-city work is meant to answer. So every other city gets a generated
+   marketplace: the same catalogue, regionally plausible names, deterministic
+   ids, and coordinates scattered through that city's own localities.
+
+   Generated rather than hand-written because the alternative is 90 more
+   literals nobody will read, and because determinism matters more than
+   individuality here — a judge who switches to Pune must see the same Pune
+   twice.
+------------------------------------------------------------------------------ */
+
+const NAME_POOL: Record<string, string[]> = {
+  blr: ['Prakash Gowda', 'Shanthi Kumari', 'Irfan Pasha', 'Nagaraju B', 'Mallika R', 'Santosh Naik', 'Yasmin Taj', 'Venu Gopal'],
+  mum: ['Sachin Kadam', 'Nilesh More', 'Rupali Shinde', 'Imtiaz Ansari', 'Vaishali Patil', 'Ganesh Jadhav', 'Farhan Qureshi', 'Manda Sawant'],
+  del: ['Rakesh Chauhan', 'Sunil Kaushik', 'Pooja Rathi', 'Naveen Tomar', 'Shabana Khan', 'Dinesh Yadav', 'Kamla Devi', 'Harish Gupta'],
+  chn: ['Karthik Raja', 'Meena Lakshmi', 'Saravanan P', 'Anitha Kumari', 'Vignesh M', 'Revathi S', 'Prakash Babu', 'Latha Rani'],
+  hyd: ['Venkatesh Rao', 'Shobha Reddy', 'Naresh Goud', 'Ayesha Sultana', 'Srinivas M', 'Padma Latha', 'Ramesh Naidu', 'Zubeda Begum'],
+  pun: ['Amol Deshmukh', 'Sneha Kulkarni', 'Prashant Pawar', 'Manisha Joshi', 'Sagar Bhosale', 'Rekha Gaikwad', 'Vikas Salunkhe', 'Asha Chavan'],
+  kol: ['Subrata Ghosh', 'Mitali Roy', 'Ashok Mondal', 'Rina Chatterjee', 'Tapan Das', 'Sikha Biswas', 'Nirmal Saha', 'Anjali Dutta'],
+  amd: ['Jignesh Patel', 'Hetal Shah', 'Bharat Solanki', 'Nita Desai', 'Mahesh Thakkar', 'Falguni Joshi', 'Kirit Chauhan', 'Rekha Parmar'],
+  koc: ['Bijoy Thomas', 'Sreeja Nair', 'Anoop Menon', 'Jaseela Beevi', 'Rajesh Pillai', 'Leena Jacob', 'Sunil Kurup', 'Mini George'],
+  cbe: ['Muthu Kumar', 'Kalaivani R', 'Senthil Nathan', 'Devi Priya', 'Arun Pandian', 'Bhuvana S', 'Ravi Chandran', 'Selvarani M'],
+  mys: ['Shivanna G', 'Bhagya Lakshmi', 'Nagaraj K', 'Sowmya Rao', 'Basavaraj H', 'Girija Bai', 'Manjunath S', 'Vinutha N'],
+  vel: ['Elango R', 'Tamilselvi K', 'Murali Krishnan', 'Jayanthi V', 'Balaji S', 'Kavitha M', 'Rajendran P', 'Sumathi A'],
+};
+
+/** Trades a city marketplace needs to feel real on day one. */
+const TRADE_MIX: { category: Worker['category']; services: string[] }[] = [
+  { category: 'electrical', services: ['fan_repair', 'wiring', 'switchboard', 'lighting'] },
+  { category: 'plumbing',   services: ['leak_repair', 'tap_fitting', 'pipe_work'] },
+  { category: 'cleaning',   services: ['home_cleaning', 'bathroom_clean', 'deep_cleaning'] },
+  { category: 'domestic',   services: ['maid', 'cook'] },
+  { category: 'appliance',  services: ['ac_service', 'fridge_repair', 'washing_machine'] },
+  { category: 'carpentry',  services: ['door_repair', 'furniture', 'lock_hinge'] },
+  { category: 'painting',   services: ['interior_paint', 'putty_primer'] },
+  { category: 'driving',    services: ['car_driver', 'delivery'] },
+];
+
+const CITY_LANG: Record<string, Worker['lang']> = {
+  mum: 'mr', del: 'hi', chn: 'ta', hyd: 'te', pun: 'mr', kol: 'bn',
+  amd: 'gu', koc: 'ml', cbe: 'ta', mys: 'kn', vel: 'ta', blr: 'kn',
+};
+
+function generatedWorkers(): Worker[] {
+  const out: Worker[] = [];
+  for (const c of CITIES) {
+    const names = NAME_POOL[c.id];
+    if (!names) continue;
+    const lang = CITY_LANG[c.id] ?? 'hi';
+    names.forEach((name, i) => {
+      const trade = TRADE_MIX[i % TRADE_MIX.length];
+      const loc = c.localities[i % c.localities.length];
+      const id = `${c.id}_w${i + 1}`;
+      /* deterministic-but-varied stats, so the list is not visibly uniform */
+      const spin = (id.charCodeAt(id.length - 1) * 7 + i * 13) % 100;
+      out.push({
+        id, name,
+        phone: `9${String(700000000 + out.length * 137 + spin).slice(0, 9)}`,
+        lang, languages: lang === 'hi' ? ['hi'] : [lang, 'hi'],
+        category: trade.category,
+        services: trade.services.slice(0, 2 + (spin % 2)),
+        experienceYears: 2 + (spin % 12),
+        rawSpeech: '', bio: '',
+        geo: scatter(loc, id),
+        radiusKm: 5 + (spin % 3) * 3,
+        availability: (['anytime', 'weekdays', 'today'] as const)[spin % 3],
+        jobsCompleted: 8 + spin,
+        rating: Number((3.9 + (spin % 11) / 10).toFixed(1)),
+        reviewCount: 4 + (spin % 40),
+        responseMins: 4 + (spin % 26),
+        verification: spin % 4 === 0
+          ? { status: 'unverified', method: 'simulated' }
+          : ver(String(1000 + spin * 7).slice(0, 4), name),
+        createdAt: T - (40 + spin) * day,
+      });
+    });
+  }
+  return out;
+}
+
 /* ---------------------------------------------------- demo client accounts */
 
 const clients: Client[] = [
   { id: 'c_demo', role: 'customer', name: 'Priya Menon', phone: '9000000002', lang: 'en',
-    geo: { ...AREAS[0], address: 'Flat 402, Green Valley' }, emergencyContact: '9000000098', createdAt: T - 60 * day },
+    geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'), emergencyContact: '9000000098', createdAt: T - 60 * day },
 
   { id: 's_demo', role: 'society', name: 'Anil Sharma', phone: '9000000003', lang: 'en',
     orgName: 'Green Valley Apartments', orgType: 'Apartment complex', size: 180,
-    geo: { ...AREAS[0], address: 'Green Valley, 5th Block' }, createdAt: T - 90 * day },
+    geo: at('blr_koramangala', 's_demo', 'Green Valley, 5th Block'), createdAt: T - 90 * day },
 
   { id: 'b_demo', role: 'business', name: 'Rakesh Sharma', phone: '9000000004', lang: 'hi',
     orgName: 'Sharma Kirana Store', orgType: 'Grocery shop', size: 4,
-    geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' }, createdAt: T - 45 * day },
+    geo: at('blr_hsr', 'b_demo', 'Shop 12, HSR Main Road'), createdAt: T - 45 * day },
 
   { id: 'c2', role: 'customer', name: 'Arjun Rao', phone: '9000000005', lang: 'en',
-    geo: { ...AREAS[1], address: 'Flat 7B, Lake View' }, createdAt: T - 20 * day },
+    geo: at('blr_hsr', 'c2', 'Flat 7B, Lake View'), createdAt: T - 20 * day },
 ];
 
 /* ------------------------------------------------------ real-sounding reviews */
@@ -204,7 +293,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'fan_repair',
       whenText: 'today evening', urgency: 'today', estimatedHours: 1,
       timePref: 'today', duration: 'hr1', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 240, priceMax: 350, priceBasis: 'standard rate · 1 hour · same day',
       status: 'requested', payment: { ...EMPTY_PAYMENT },
       requestedAt: ago(4), createdAt: ago(4),
@@ -216,7 +305,7 @@ function buildJobs(now: number): Job[] {
       lang: 'hi', category: 'cleaning', serviceId: 'home_cleaning',
       whenText: 'this week', urgency: 'this_week', estimatedHours: 2,
       timePref: 'tomorrow', duration: 'hr2', photos: [],
-      geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
+      geo: at('blr_hsr', 'b_demo', 'Shop 12, HSR Main Road'),
       priceMin: 500, priceMax: 700, priceBasis: 'standard rate · 2 hours · no rush',
       status: 'requested', payment: { ...EMPTY_PAYMENT },
       requestedAt: ago(20), createdAt: ago(20),
@@ -228,7 +317,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'maintenance', serviceId: 'water_tank_clean',
       whenText: 'this week', urgency: 'this_week', estimatedHours: 6,
       timePref: 'scheduled', duration: 'halfday', photos: [],
-      geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
+      geo: at('blr_koramangala', 's_demo', 'Green Valley, 5th Block'),
       priceMin: 2800, priceMax: 3900, priceBasis: 'standard rate · 6 hours · no rush',
       status: 'requested', scheduledAt: now + 2 * day,
       payment: { ...EMPTY_PAYMENT },
@@ -245,7 +334,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'switchboard',
       whenText: 'as soon as possible', urgency: 'emergency', estimatedHours: 1,
       timePref: 'asap', duration: 'hr1', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 420, priceMax: 600, priceBasis: 'emergency rate · 1 hour · right now',
       status: 'on_the_way', assignedWorkerId: 'w_demo', agreedAmount: 520,
       payment: held(520, 'upi', ago(0.4)),
@@ -260,7 +349,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'inverter',
       whenText: 'today', urgency: 'today', estimatedHours: 2,
       timePref: 'today', duration: 'hr2', photos: [],
-      geo: { ...AREAS[1], address: 'Flat 7B, Lake View' },
+      geo: at('blr_hsr', 'c2', 'Flat 7B, Lake View'),
       priceMin: 700, priceMax: 950, priceBasis: 'standard rate · 2 hours · same day',
       status: 'working', assignedWorkerId: 'w_demo', agreedAmount: 850,
       payment: held(850, 'gpay', ago(3)),
@@ -274,7 +363,7 @@ function buildJobs(now: number): Job[] {
       lang: 'hi', category: 'cleaning', serviceId: 'home_cleaning',
       whenText: 'tonight', urgency: 'today', estimatedHours: 2,
       timePref: 'today', duration: 'hr2', photos: [],
-      geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
+      geo: at('blr_hsr', 'b_demo', 'Shop 12, HSR Main Road'),
       priceMin: 400, priceMax: 550, priceBasis: 'standard rate · 2 hours · same day',
       status: 'accepted', assignedWorkerId: 'w6', agreedAmount: 480,
       payment: { method: 'cash', status: 'unpaid', amount: 480, protected: false, updatedAt: ago(5) },
@@ -288,7 +377,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'carpentry', serviceId: 'door_repair',
       whenText: 'this week', urgency: 'this_week', estimatedHours: 4,
       timePref: 'scheduled', duration: 'halfday', photos: [],
-      geo: { ...AREAS[0], address: 'Green Valley, B Block' },
+      geo: at('blr_koramangala', 's_demo_b', 'Green Valley, B Block'),
       priceMin: 1600, priceMax: 2200, priceBasis: 'standard rate · 4 hours · no rush',
       status: 'accepted', assignedWorkerId: 'w7', agreedAmount: 1900,
       scheduledAt: now + 1 * day,
@@ -304,7 +393,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'lighting',
       whenText: 'yesterday', urgency: 'flexible', estimatedHours: 1,
       timePref: 'asap', duration: 'min30', photos: [],
-      geo: { ...AREAS[1], address: 'Flat 7B, Lake View' },
+      geo: at('blr_hsr', 'c2', 'Flat 7B, Lake View'),
       priceMin: 260, priceMax: 380, priceBasis: 'standard rate · 30 minutes · no rush',
       status: 'worker_done', assignedWorkerId: 'w_demo', agreedAmount: 320,
       payment: held(320, 'phonepe', ago(27)),
@@ -320,7 +409,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'fan_repair',
       whenText: 'today morning', urgency: 'today', estimatedHours: 1,
       timePref: 'asap', duration: 'min30', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 300, priceMax: 420, priceBasis: 'standard rate · 30 minutes · same day',
       status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 380,
       payment: paid(380, 'upi', ago(5)),
@@ -334,7 +423,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'wiring',
       whenText: 'this week', urgency: 'this_week', estimatedHours: 2,
       timePref: 'scheduled', duration: 'hr2', photos: [],
-      geo: { ...AREAS[1], address: 'Flat 7B, Lake View' },
+      geo: at('blr_hsr', 'c2', 'Flat 7B, Lake View'),
       priceMin: 450, priceMax: 620, priceBasis: 'standard rate · 2 hours · no rush',
       status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 520,
       payment: paid(520, 'gpay', ago(24 * 4)),
@@ -348,7 +437,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'lighting',
       whenText: 'last week', urgency: 'flexible', estimatedHours: 5,
       timePref: 'scheduled', duration: 'halfday', photos: [],
-      geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
+      geo: at('blr_koramangala', 's_demo', 'Green Valley, 5th Block'),
       priceMin: 950, priceMax: 1400, priceBasis: 'standard rate · 5 hours · no rush',
       status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 1150,
       payment: paid(1150, 'upi', ago(24 * 9)),
@@ -362,7 +451,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'electrical', serviceId: 'wiring',
       whenText: 'flexible', urgency: 'flexible', estimatedHours: 1,
       timePref: 'asap', duration: 'hr1', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 520, priceMax: 700, priceBasis: 'standard rate · 1 hour · no rush',
       status: 'completed', assignedWorkerId: 'w_demo', agreedAmount: 640,
       payment: paid(640, 'cash', ago(24 * 19)),
@@ -376,7 +465,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'domestic', serviceId: 'maid',
       whenText: 'weekdays', urgency: 'flexible', estimatedHours: 3,
       timePref: 'scheduled', duration: 'halfday', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 380, priceMax: 520, priceBasis: 'standard rate · 3 hours · no rush',
       status: 'completed', assignedWorkerId: 'w5', agreedAmount: 450,
       payment: paid(450, 'upi', ago(24 * 3)),
@@ -390,7 +479,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'appliance', serviceId: 'ac_service',
       whenText: 'last week', urgency: 'today', estimatedHours: 2,
       timePref: 'asap', duration: 'hr2', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 900, priceMax: 1400, priceBasis: 'standard rate · 2 hours · same day',
       status: 'completed', assignedWorkerId: 'w11', agreedAmount: 1200,
       payment: paid(1200, 'card_debit', ago(24 * 12)),
@@ -404,7 +493,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'cleaning', serviceId: 'deep_cleaning',
       whenText: 'last month', urgency: 'flexible', estimatedHours: 8,
       timePref: 'scheduled', duration: 'fullday', photos: [],
-      geo: { ...AREAS[0], address: 'Green Valley, 5th Block' },
+      geo: at('blr_koramangala', 's_demo', 'Green Valley, 5th Block'),
       priceMin: 2000, priceMax: 2900, priceBasis: 'standard rate · 8 hours · no rush',
       status: 'completed', assignedWorkerId: 'w6', agreedAmount: 2400,
       payment: paid(2400, 'upi', ago(24 * 16)),
@@ -418,7 +507,7 @@ function buildJobs(now: number): Job[] {
       lang: 'hi', category: 'driving', serviceId: 'car_driver',
       whenText: 'last week', urgency: 'flexible', estimatedHours: 4,
       timePref: 'scheduled', duration: 'halfday', photos: [],
-      geo: { ...AREAS[1], address: 'Shop 12, HSR Main Road' },
+      geo: at('blr_hsr', 'b_demo', 'Shop 12, HSR Main Road'),
       priceMin: 700, priceMax: 1000, priceBasis: 'standard rate · 4 hours · no rush',
       status: 'completed', assignedWorkerId: 'w13', agreedAmount: 900,
       payment: paid(900, 'cash', ago(24 * 8)),
@@ -434,7 +523,7 @@ function buildJobs(now: number): Job[] {
       lang: 'en', category: 'plumbing', serviceId: 'tap_fitting',
       whenText: 'flexible', urgency: 'flexible', estimatedHours: 1,
       timePref: 'asap', duration: 'min30', photos: [],
-      geo: { ...AREAS[0], address: 'Flat 402, Green Valley' },
+      geo: at('blr_koramangala', 'c_demo', 'Flat 402, Green Valley'),
       priceMin: 220, priceMax: 320, priceBasis: 'standard rate · 30 minutes · no rush',
       status: 'cancelled_by_client', assignedWorkerId: 'w3', agreedAmount: 270,
       payment: { method: 'upi', status: 'refunded', amount: 270, protected: true, updatedAt: ago(24 * 6) },
@@ -499,7 +588,7 @@ function buildQuotes(now: number): Quote[] {
 function buildSos(now: number): SosEvent[] {
   return [
     /* raised once, resolved — proves the button is wired to something real */
-    { id: 'sos1', jobId: 'j17', at: now - 24 * 9 * hour, by: 'worker', lat: AREAS[0].lat, lng: AREAS[0].lng, resolved: true },
+    { id: 'sos1', jobId: 'j17', at: now - 24 * 9 * hour, by: 'worker', lat: 12.9352, lng: 77.6245, resolved: true },
   ];
 }
 
@@ -520,7 +609,9 @@ export const DEMO_ACCOUNTS = [
 export function seedDB(): DB {
   const now = Date.now();
   return {
-    workers: workers.map((x) => ({ ...x, verification: { ...x.verification }, services: [...x.services], languages: [...x.languages] })),
+    workers: [...bengaluruWorkers, ...generatedWorkers()].map((x) => ({
+      ...x, verification: { ...x.verification }, services: [...x.services], languages: [...x.languages],
+    })),
     clients: clients.map((x) => ({ ...x })),
     jobs: buildJobs(now),
     quotes: buildQuotes(now),

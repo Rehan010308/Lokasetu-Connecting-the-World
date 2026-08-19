@@ -6,7 +6,7 @@ import { serviceName, categoryName } from '@/lib/i18n-catalog';
 import { langNative } from '@/lib/i18n';
 import { etaMinutes } from '@/lib/ai/match';
 import { suggestPrice } from '@/lib/ai/pricing';
-import { distanceKm, formatKm } from '@/lib/geo';
+import { distanceKm, formatDistance } from '@/lib/geo';
 import { telLink, waLink, waShare, workerShareText, origin } from '@/lib/links';
 import { useMe, useStore, useT } from '@/components/store';
 import { CardSkeleton, Dock, GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
@@ -79,7 +79,7 @@ function Profile() {
             <div className="grid-2" style={{ marginTop: 16, gap: 10 }}>
               <div className="stat"><div className="n t-num">{w.jobsCompleted}</div><div className="l">{t('w.jobsDone')}</div></div>
               <div className="stat"><div className="n t-num">{w.experienceYears}</div><div className="l">{t('w.experience')} ({t('c.years')})</div></div>
-              <div className="stat"><div className="n t-num">{formatKm(km)}</div><div className="l">{t('w.away')}</div></div>
+              <div className="stat"><div className="n t-num">{formatDistance(km, t('c.nearby'))}</div><div className="l">{t('w.away')}</div></div>
               <div className="stat"><div className="n t-num">{w.responseMins} {t('c.min')}</div><div className="l">{t('w.respondsIn')}</div></div>
             </div>
           </GlassCard>

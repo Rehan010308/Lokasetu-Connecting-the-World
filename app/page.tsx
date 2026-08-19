@@ -7,7 +7,7 @@ import { CATEGORIES } from '@/lib/catalog';
 import { categoryName, serviceName } from '@/lib/i18n-catalog';
 import { matchServices } from '@/lib/catalog';
 import { rankWorkers, etaMinutes } from '@/lib/ai/match';
-import { formatKm } from '@/lib/geo';
+import { formatDistance } from '@/lib/geo';
 import { useMe, useStore, useT } from '@/components/store';
 import { useSpeech } from '@/components/kit';
 import { Dock, GlassCard, Magnetic, PullToRefresh, Reveal, Stagger, StaggerItem, VoiceOrb } from '@/components/aurora';
@@ -78,7 +78,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
         </Reveal>
 
         <Reveal delay={0.05}>
-          <form className="field" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <form className="field hero-search" onSubmit={(e) => { e.preventDefault(); submit(); }}>
             <span aria-hidden style={{ fontSize: 20, opacity: 0.5 }}>🔎</span>
             <input
               className="input bare grow"
@@ -134,6 +134,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
               <h2 className="t-h3">{t('h.myJobs')}</h2>
               <Link href="/jobs" className="t-xs strong" style={{ color: 'var(--em-600)' }}>{t('h.viewAll')} →</Link>
             </div>
+            <div className="v-3 grid-cards">
             {myJobs.map((j) => {
               const w = j.assignedWorkerId ? db.workers.find((x) => x.id === j.assignedWorkerId) : null;
               return (
@@ -141,7 +142,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
                   <GlassCard interactive className="pad-s">
                     <div className="between">
                       <div className="grow" style={{ minWidth: 0 }}>
-                        <div className="t-sm strong" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div className="t-sm strong clamp-2">
                           {j.title}
                         </div>
                         <div className="t-xs" style={{ marginTop: 3 }}>
@@ -154,6 +155,7 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
                 </Link>
               );
             })}
+            </div>
           </section>
         ) : null}
 
@@ -260,7 +262,7 @@ function WorkerHome() {
             tips={workerTips(w, t)}
           />
         ) : (
-          <Stagger className="v-3" gap={0.06}>
+          <Stagger className="v-3 grid-cards" gap={0.06}>
             {feed.map(({ job, km }) => (
               <StaggerItem key={job.id}>
                 <Link href={`/job/${job.id}`} style={{ display: 'block' }}>
@@ -268,7 +270,7 @@ function WorkerHome() {
                     <div className="t-h3" style={{ lineHeight: 1.3 }}>{job.title}</div>
                     <div className="h-2 wrap" style={{ gap: 7, marginTop: 10 }}>
                       <span className="tag in">{t(`u.${job.urgency}` as any)}</span>
-                      <span className="tag">📍 {formatKm(km)}</span>
+                      <span className="tag">📍 {formatDistance(km, t('c.nearby'))}</span>
                       <span className="tag">~{etaMinutes(km)} {t('c.min')}</span>
                       {job.serviceId ? <span className="tag">{serviceName(job.serviceId, lang)}</span> : null}
                     </div>

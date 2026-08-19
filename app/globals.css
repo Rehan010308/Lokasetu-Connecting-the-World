@@ -112,6 +112,8 @@
   --tap: 56px;
   --gutter: 18px;
   --shell: 520px;
+  /* the desktop navigation rail: a surface, not a floating card */
+  --rail-bg: rgba(255,255,255,.66);
 
   /* — motion — */
   --e-out:    cubic-bezier(.22, 1, .36, 1);
@@ -126,6 +128,7 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
+  --rail-bg: rgba(10,17,26,.72);
   --canvas: #060A11;
   --canvas-2: #0A111A;
   --ink: #EAF1F8;
@@ -283,6 +286,18 @@ input, textarea, select { font: inherit; }
   background-clip: text;
   color: transparent;
 }
+/* One line, or two, then an ellipsis. A card title in a grid has room for a
+   second line and truncating "Switchboard sparking in the kitchen" to
+   "Switchboard sparkin…" costs the reader the whole point of the sentence. */
+.clamp-1, .clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.clamp-1 { -webkit-line-clamp: 1; }
+.clamp-2 { -webkit-line-clamp: 2; }
+
 .dim { color: var(--ink-3); }
 .strong { font-weight: 700; color: var(--ink); }
 
@@ -1429,25 +1444,45 @@ label.lbl { display: block; font-size: 13.5px; font-weight: 700; color: var(--in
 
 /* --------------------------------------------- 18b. LAPTOP — THREE PANELS */
 
+/*
+ * The rewrite that mattered.
+ *
+ * The first attempt centred a 1180px block and let the rest of a 1920px
+ * monitor go to waste — a phone layout with expensive margins, which is the
+ * thing this was supposed to stop being. What Uber, Airbnb, LinkedIn and
+ * Notion actually do on a desktop:
+ *
+ *   - the navigation is PINNED TO THE VIEWPORT EDGE and runs full height,
+ *     with a border, not a floating rounded card,
+ *   - the content column is FLUID and takes whatever is left,
+ *   - lists of cards become GRIDS, so extra width buys more content per
+ *     screen instead of more whitespace,
+ *   - the utility panel is pinned to the right edge at a fixed width.
+ *
+ * So: no centring, no max-width on the shell, `1fr` in the middle.
+ */
+
 @media (min-width: 1024px) {
   :root {
-    --gutter: 32px;
-    --rail: 236px;    /* left navigation                */
-    --col:  640px;    /* the reading column             */
-    --aside: 328px;   /* right context panel            */
-    --deck-gap: 32px;
+    --gutter: 36px;
+    --rail: 244px;     /* left navigation, pinned  */
+    --aside: 336px;    /* right utility panel      */
+    --deck-gap: 34px;
+    --card-min: 296px; /* narrowest a card may get before the grid re-flows */
   }
+
+  body { overflow-x: hidden; }
 
   .shell,
   .shell.wide {
     max-width: none;
+    width: 100%;
     display: grid;
-    grid-template-columns: auto minmax(0, var(--col)) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto 1fr;
-    justify-content: center;
-    column-gap: var(--deck-gap);
     align-items: start;
-    padding: 0 32px;
+    column-gap: var(--deck-gap);
+    padding: 0 var(--gutter) 0 0;
   }
 
   .shell > .topbar { grid-column: 2; grid-row: 1; }
@@ -1458,97 +1493,156 @@ label.lbl { display: block; font-size: 13.5px; font-weight: 700; color: var(--in
   .shell > .dock     { grid-column: 1; grid-row: 1 / -1; }
   .shell > .rail-r   { grid-column: 3; grid-row: 1 / -1; }
 
+  /* A shell with no rail still needs its left margin back. */
+  .shell:not(:has(> .dock)) { padding-left: var(--gutter); }
+
+  /* Focused flows — login, booking, onboarding — are the one place a narrow
+     measure is right: a form 1200px wide is unreadable. They have no rail and
+     no panel, so they centre instead of stretching. */
+  .shell:not(:has(> .dock)) > .page,
+  .shell:not(:has(> .dock)) > .ptr-host,
+  .shell:not(:has(> .dock)) > .topbar { max-width: 720px; margin-inline: auto; }
+
   .page { padding: 0 0 72px; }
 
   /* the brand lives in the rail up here, so the topbar loses its tile */
-  .topbar { position: static; padding: 26px 0 14px; background: none; }
+  .topbar { position: static; padding: 30px 0 16px; background: none; }
   .topbar > .mark { display: none; }
   .topbar.glassy { background: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: none; }
   .topbar.glassy::after { display: none; }
+  .topbar .t-h3 { font-size: 24px; letter-spacing: -.035em; }
 
-  /* ---- the floating dock becomes a standing navigation rail ---- */
+  /* ---- navigation: pinned to the left edge, full height ---- */
   .dock {
     position: sticky;
-    top: 26px;
+    top: 0;
     left: auto;
     bottom: auto;
     transform: none;
     width: var(--rail);
     max-width: none;
+    height: 100dvh;
     flex-direction: column;
     align-items: stretch;
     gap: 4px;
-    padding: 16px 12px;
-    border-radius: var(--r-lg);
-    align-self: start;
-    margin: 26px 0 32px;
+    padding: 26px 14px;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid var(--hairline-2);
+    box-shadow: none;
+    background: var(--rail-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .dock-item {
-    height: 48px;
-    padding: 0 15px;
-    border-radius: var(--r-md);
+    height: 46px;
+    padding: 0 14px;
+    border-radius: var(--r-sm);
     font-size: 14.5px;
     justify-content: flex-start;
   }
   .dock-item .lbl { max-width: 200px; opacity: 1; }
-  .dock-pill { border-radius: var(--r-md); }
+  .dock-pill { border-radius: var(--r-sm); box-shadow: none; }
 
   .dock-brand {
     display: flex;
     align-items: center;
     gap: 11px;
-    padding: 4px 8px 16px;
-    margin-bottom: 8px;
+    padding: 2px 6px 18px;
+    margin-bottom: 10px;
     border-bottom: 1px solid var(--hairline-2);
   }
   .dock-brand .nm { font-size: 17px; font-weight: 800; letter-spacing: -.03em; color: var(--ink); }
   .dock-brand .sb { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
 
-  /* ---- right-hand context panel ---- */
+  /* ---- right utility panel ---- */
   .rail-r {
     display: flex;
     flex-direction: column;
     gap: 16px;
     width: var(--aside);
     position: sticky;
-    top: 26px;
+    top: 0;
     align-self: start;
-    padding: 26px 0 40px;
+    max-height: 100dvh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: 30px 0 40px;
   }
   .rail-r .t-h3 { font-size: 15.5px; }
 
+  /* ---- lists of cards become grids ----
+     This is what actually stops a 27-inch monitor looking empty: width buys
+     more jobs on screen, not more margin. Anything tagged `grid-cards`
+     re-flows; a form or a conversation deliberately is not tagged. */
+  .grid-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+    gap: 18px;
+    align-items: start;
+  }
+  .grid-cards > * { min-width: 0; }
+
+  /* the quick-pick tiles are small, so they fit many more across */
+  .grid-3 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+  .grid-2 { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+  /* Prose, forms and a single search field still want a human measure even
+     inside a wide column — a 1000px-wide text input is harder to use, not
+     easier. Card grids are the thing that should consume the width. */
+  .measure { max-width: 680px; }
+  .hero-search { max-width: 720px; }
+
   /* ---- surfaces get a little more air on a big screen ---- */
-  .glass, .card { border-radius: var(--r-xl); }
   .pad   { padding: 22px; }
   .empty { padding: 76px 36px; }
   .empty .big { font-size: 54px; }
-
-  .grid-3 { gap: 14px; }
-  .grid-2 { gap: 16px; }
+  .empty.smart .tips { max-width: 560px; margin-left: auto; margin-right: auto; }
 
   /* modal, not bottom sheet */
-  .modal-surface {
-    border-radius: var(--r-xl) !important;
-    max-width: 560px;
-  }
+  .modal-surface { border-radius: var(--r-xl) !important; max-width: 560px; }
 
-  .scroll-x { margin: 0; padding-left: 0; padding-right: 0; }
+  .scroll-x { margin: 0; padding-left: 0; padding-right: 0; flex-wrap: wrap; overflow: visible; }
 }
 
 /* ------------------------------------------------ 18c. LARGE DESKTOP 1440+ */
 
 @media (min-width: 1440px) {
   :root {
-    --rail: 264px;
-    --col:  720px;
+    --gutter: 44px;
+    --rail: 268px;
     --aside: 372px;
-    --deck-gap: 40px;
+    --deck-gap: 44px;
+    --card-min: 306px;
   }
-
   .t-display { font-size: 46px; }
-  .dock { padding: 18px 14px; }
-  .dock-item { height: 52px; font-size: 15px; }
+  .dock-item { height: 50px; font-size: 15px; }
   .rail-r .t-h3 { font-size: 16px; }
+}
+
+/* --------------------------------------------------- 18c2. 1080p AND ABOVE */
+
+@media (min-width: 1920px) {
+  :root {
+    --gutter: 56px;
+    --rail: 292px;
+    --aside: 408px;
+    --deck-gap: 56px;
+    --card-min: 318px;
+  }
+  /* Past a point, more columns beat wider columns — but text still needs a
+     measure, so only the card grids keep growing. */
+  .measure { max-width: 760px; }
+  .t-display { font-size: 52px; }
+}
+
+/* --------------------------------------------------------- 18c3. 4K / 2560+ */
+
+@media (min-width: 2560px) {
+  :root { --card-min: 360px; --aside: 440px; --rail: 320px; }
+  /* A 4K monitor is usually further from the face; nothing shrinks, the grid
+     simply gets another column or two. */
 }
 
 /* -------------------------------------------- 18d. THE PHONE, UNCHANGED */

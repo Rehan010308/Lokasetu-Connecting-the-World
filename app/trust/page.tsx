@@ -53,7 +53,7 @@ export default function TrustPage() {
           </GlassCard>
         </Reveal>
 
-        <Stagger className="v-3" gap={0.05}>
+        <Stagger className="v-3 grid-cards" gap={0.05}>
           {SECTIONS.map((s) => (
             <StaggerItem key={s.titleKey}>
               <GlassCard className="pad">

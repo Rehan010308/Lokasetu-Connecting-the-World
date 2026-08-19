@@ -7,7 +7,7 @@ import { categoryName, serviceName } from '@/lib/i18n-catalog';
 import { parseRequest } from '@/lib/ai/request';
 import { suggestPrice } from '@/lib/ai/pricing';
 import { rankWorkers, etaMinutes } from '@/lib/ai/match';
-import { AREAS, nearestArea, formatKm } from '@/lib/geo';
+import { AREAS, nearestArea, formatDistance } from '@/lib/geo';
 import { TRUST_POINTS } from '@/lib/payments';
 import type { DurationEstimate, Geo, TimePreference } from '@/lib/types';
 import { useActions, useMe, useStore, useT } from '@/components/store';
@@ -365,7 +365,7 @@ function Book() {
                             <div className="grow" style={{ minWidth: 0 }}>
                               <div className="t-sm strong">{m.worker.name}</div>
                               <div className="t-xs" style={{ marginTop: 2 }}>
-                                📍 {formatKm(m.km)} · ~{etaMinutes(m.km)} {t('c.min')} · {m.worker.jobsCompleted} {t('w.jobsDone')}
+                                📍 {formatDistance(m.km, t('c.nearby'))} · ~{etaMinutes(m.km)} {t('c.min')} · {m.worker.jobsCompleted} {t('w.jobsDone')}
                               </div>
                             </div>
                             <VerifiedBadge v={m.worker.verification} small />

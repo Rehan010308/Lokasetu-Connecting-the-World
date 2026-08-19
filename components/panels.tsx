@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import type { Job, Worker } from '@/lib/types';
 import { etaMinutes } from '@/lib/ai/match';
-import { formatKm } from '@/lib/geo';
+import { formatDistance } from '@/lib/geo';
 import { amountFor, statusKey } from '@/lib/payments';
 import { telLink, waLink, navigateLink } from '@/lib/links';
 import { hoursPerWeek, monthlyCost, shiftSummary } from '@/lib/shifts';
@@ -169,7 +169,7 @@ export function JobPanel({ job, worker, km }: { job: Job; worker: Worker | null;
       <Panel title={t('d.thisJob')} icon="📋">
         <StatRow label={t('y.agreed')} value={<Money amount={amountFor(job)} />} />
         <StatRow label={t('c.done')} value={t(statusKey(job.payment.status) as any)} />
-        {worker ? <StatRow label={t('w.away')} value={formatKm(km)} hint={`~${etaMinutes(km)} ${t('c.min')}`} /> : null}
+        {worker ? <StatRow label={t('w.away')} value={formatDistance(km, t('c.nearby'))} hint={`~${etaMinutes(km)} ${t('c.min')}`} /> : null}
         {job.payment.protected ? <p className="note em" style={{ marginTop: 4 }}>🔒 {t('ts.protected')}</p> : null}
       </Panel>
 
@@ -258,7 +258,7 @@ export function WorkerProfilePanel({ worker, km }: { worker: Worker; km: number 
         <VerifiedBadge v={worker.verification} small />
         <StatRow label={t('w.jobsDone')} value={worker.jobsCompleted} />
         <StatRow label={t('w.experience')} value={worker.experienceYears} />
-        <StatRow label={t('w.away')} value={formatKm(km)} hint={`~${etaMinutes(km)} ${t('c.min')}`} />
+        <StatRow label={t('w.away')} value={formatDistance(km, t('c.nearby'))} hint={`~${etaMinutes(km)} ${t('c.min')}`} />
         <StatRow label={t('w.respondsIn')} value={`${worker.responseMins} ${t('c.min')}`} />
       </Panel>
 

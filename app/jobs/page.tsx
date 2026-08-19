@@ -56,7 +56,7 @@ export default function JobsPage() {
         ) : null}
 
         {live.length ? (
-          <Stagger className="v-3" gap={0.05}>
+          <Stagger className="v-3 grid-cards" gap={0.05}>
             {live.map((j) => <StaggerItem key={j.id}><JobRow job={j} lang={lang} t={t} db={db} /></StaggerItem>)}
           </Stagger>
         ) : null}
@@ -65,7 +65,7 @@ export default function JobsPage() {
           <>
             <hr className="rule" style={{ margin: '8px 0' }} />
             <p className="t-micro">{t('j.completed')}</p>
-            <Stagger className="v-3" gap={0.04}>
+            <Stagger className="v-3 grid-cards" gap={0.04}>
               {past.map((j) => <StaggerItem key={j.id}><JobRow job={j} lang={lang} t={t} db={db} /></StaggerItem>)}
             </Stagger>
           </>
@@ -91,7 +91,7 @@ function JobRow({ job, lang, t, db }: any) {
       <GlassCard interactive className="pad-s">
         <div className="between top">
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="t-sm strong" style={{ lineHeight: 1.35 }}>{job.title}</div>
+            <div className="t-sm strong clamp-2" style={{ lineHeight: 1.35 }}>{job.title}</div>
             <div className="t-xs" style={{ marginTop: 4 }}>
               {job.serviceId ? serviceName(job.serviceId, lang) + ' · ' : ''}{job.geo.areaName.split(',')[0]}
             </div>

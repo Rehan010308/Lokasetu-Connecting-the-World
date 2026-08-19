@@ -155,9 +155,13 @@ export interface Client {
 export interface Geo {
   lat: number;
   lng: number;
+  /** human label, e.g. "Koramangala, Bengaluru" */
   areaName: string;
   /** free-text address the client typed or dictated */
   address?: string;
+  /** lib/cities.ts ids — what search, matching and distance filter on */
+  cityId?: string;
+  localityId?: string;
 }
 
 /* ------------------------------------------------------------------- work */

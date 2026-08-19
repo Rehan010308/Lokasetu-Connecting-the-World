@@ -3,7 +3,7 @@
 import React from 'react';
 import type { Geo } from '@/lib/types';
 import { etaMinutes } from '@/lib/ai/match';
-import { distanceKm, formatKm } from '@/lib/geo';
+import { distanceKm, formatDistance } from '@/lib/geo';
 import { navigateLink } from '@/lib/links';
 import {
   ATTRIBUTION, fitZoom, lerpGeo, midpoint, tilesFor, toPixel, travelProgress,
@@ -80,7 +80,7 @@ export function LiveMap({
   return (
     <div className="v-2">
       <div ref={boxRef} className="map" style={{ height: H }} role="img"
-        aria-label={`${formatKm(km)} — ${remaining} ${t('c.min')}`}>
+        aria-label={`${formatDistance(km, t('c.nearby'))} — ${remaining} ${t('c.min')}`}>
 
         {/* Tiles are background images on plain divs, not <img>. A failed <img>
             paints a broken-page glyph for as long as it takes an error handler
@@ -123,7 +123,7 @@ export function LiveMap({
             <span className="live-dot" />
             <b>{remaining} {t('c.min')}</b>
             <span className="sep">·</span>
-            <span>{formatKm(km * (1 - progress))}</span>
+            <span>{formatDistance(km * (1 - progress), t('c.nearby'))}</span>
           </div>
         ) : null}
       </div>
