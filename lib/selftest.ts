@@ -533,8 +533,21 @@ const en = (k: any) => t('en', k);
     const store = readFileSync(new URL('../components/store.tsx', import.meta.url), 'utf8');
     ok('the store does not seed during render', !store.includes('useState<DB>(() => seedDB())'));
     ok('the server renders an empty database', store.includes('useState<DB>(EMPTY_DB)'));
+    /* Every call to seedDB must sit after the first useEffect — i.e. inside
+       one. Checking position rather than an exact call shape, because the
+       exact shape changed once and quietly broke this assertion. */
+    const storeNoComments = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const firstEffect = storeNoComments.indexOf('useEffect(');
+    const seedCalls = [...storeNoComments.matchAll(/seedDB\(\)/g)].map((m) => m.index ?? -1);
     ok('seeding happens in an effect, which never runs on the server',
-       /useEffect\([\s\S]{0,400}setDb\(seedDB\(\)\)/.test(store));
+       firstEffect > 0 && seedCalls.length > 0 && seedCalls.every((i) => i > firstEffect),
+       `${seedCalls.length} call(s), all after the first effect`);
+
+    /* Storage written by an older build must not be read by a newer one. */
+    ok('stored data is stamped with the build that wrote it',
+       storeNoComments.includes('version: VERSION'));
+    ok('stored data from another build is discarded, not parsed',
+       storeNoComments.includes('stored?.version === VERSION'));
 
     /* The crash that an empty database used to cause. Comments are stripped
        first: the fix is DESCRIBED in a comment right next to the code, and a
@@ -578,6 +591,21 @@ const en = (k: any) => t('en', k);
     const cfg = readFileSync(new URL('../next.config.mjs', import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '');
     ok('TypeScript errors still stop the build', !cfg.includes('ignoreBuildErrors'));
+
+    /* The build number is stated in three files. It drifted: the app said
+       4.1.3 while the README — the GitHub front page — still announced v4.1,
+       so the repo advertised a build nobody was running. lib/version.ts is the
+       source of truth; these fail if the copies fall behind it again. */
+    const rd = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
+    const declared = rd('./version.ts').match(/VERSION = '([^']+)'/)?.[1];
+    const inPkg = JSON.parse(rd('../package.json')).version;
+    const inReadme = rd('../README.md').match(/\*\*Current build: v([\d.]+)\*\*/)?.[1];
+
+    ok('the app declares a version', !!declared, declared);
+    ok('package.json matches lib/version.ts', inPkg === declared, `${inPkg} vs ${declared}`);
+    ok('the README matches lib/version.ts', inReadme === declared, `${inReadme} vs ${declared}`);
+    ok('a sync script exists so this is one command, not three edits',
+       JSON.parse(rd('../package.json')).scripts['version:sync'] === 'node scripts/version.mjs');
 
     /* The test harness must stay out of the app's build graph. */
     const tsconfig = readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8');

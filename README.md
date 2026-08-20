@@ -1,157 +1,139 @@
 # LokaSetu — AI-powered hyperlocal employment platform
 
 > लोक सेतु — "the bridge of people". Connects India's informal workforce
-> (electricians, plumbers, carpenters, painters, house help, cooks, barbers,
-> raddiwalas, shop assistants) with residents in the same neighbourhood —
-> by **voice**, in **ten languages**, with **no forms to fill**.
+> (electricians, plumbers, carpenters, painters, house help, cooks, drivers,
+> raddiwalas, shop assistants) with the people who need them in the same
+> neighbourhood — **by voice**, in **ten languages**, with **no forms to fill**.
 
-**Current build: v4.1** — 12 cities, dedicated desktop layouts, live tracking,
-recurring shifts, an earnings dashboard, and a Trust & Safety centre.
+**Current build: v4.1.5**
 
-```bash
-npm install
-npm run dev      # http://localhost:3000
-npm test         # 204 assertions
-npm run doctor   # detect leftover files from an older unzip
-```
-
-**Demo accounts** — OTP is always `123456`:
-
-| Role | Phone |
-|---|---|
-| Worker | 9000000001 |
-| Customer | 9000000002 |
-| Society | 9000000003 |
-| Business | 9000000004 |
-
-## Run it
+The same number prints on the login screen and at the foot of the Profile tab,
+so what you are running is always checkable against what this file claims.
+`lib/version.ts` is the source of truth; `npm run version:sync` copies it into
+`package.json` and here, and `npm test` fails if the three ever disagree.
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
-npm run test         # self-test of the whole logic layer
-npm run build        # production build
+npm run dev        # http://localhost:3000
+npm test           # 223 assertions over the whole logic layer
+npm run ssr        # render every route server-side, as a deploy does
+npm run typecheck  # TypeScript, no emit
+npm run doctor     # detect leftover files from an older unzip
 ```
 
-No database, no API keys, no external services needed. Demo data lives in the
-browser's localStorage. "Reset demo" on the home page restores it.
+## Demo accounts
 
-## Try the full loop in 3 minutes
+One tap on `/login`. OTP is always **123456**.
 
-1. **Home →** pick a language (the whole app switches).
-2. **"I am looking for work"** → language → phone `9876543210` → OTP `123456`
-   → tap the mic and say *"I do electrical wiring, fan installation and
-   inverter repairs, six years experience"* (or type it) → confirm the
-   auto-generated profile → pick your area + radius → availability → done.
-   You now see ranked jobs near you with match scores.
-3. Open a job → **send a price**.
-4. **New tab → "I need someone for a job"** → sign in with `9000000001`
-   (the demo resident, OTP `123456`) → open *"Ceiling fan is making noise"* →
-   your quote is there → **Hire** → chat (messages auto-translate between the
-   two languages) → mark done → confirm → rate with three taps.
-5. **/scrap** — upload any photo, get materials + value, call a collector.
-6. **/insights** — demand vs supply per trade and per locality.
-7. **/qr** — the printable poster workers scan to sign up.
+| Role | Who | Phone |
+|---|---|---|
+| Worker | Ramesh Kumar — electrician, verified, a year of earnings history | 9000000001 |
+| Customer | Priya Menon — Koramangala | 9000000002 |
+| Society | Anil Sharma — Green Valley Apartments, 180 flats | 9000000003 |
+| Business | Rakesh Sharma — Sharma Kirana Store | 9000000004 |
+
+## The three-minute tour
+
+1. Sign in as the **worker**. The feed shows only electrical work — search it,
+   sort by distance, urgency or pay.
+2. **Earnings** — seven ranges over a real year of history, with a chart.
+3. Sign in as the **customer** in another window. Open *"Switchboard sparking
+   in the kitchen"*: the Contact Hub leads with call / WhatsApp / location, and
+   the map shows the worker moving toward you with a live ETA.
+4. **Society or business** → `/hire` → build a recurring shift: Mon/Wed/Fri,
+   9pm–11pm, for three months. The cost is derived from the roster, not guessed.
+5. Change city in the header. Twelve cities, each with its own marketplace.
 
 ## Routes
 
 | Route | What it is |
 |---|---|
-| `/login` | Role picker + one-tap demo accounts |
-| `/` | Search-first home (clients) or job feed (workers) |
+| `/login` | Role picker, city picker, one-tap demo accounts |
+| `/` | Search-first home (customers) or the job feed (workers) |
 | `/search` | Categories → services → workers who do that exact service |
 | `/worker/[id]` | Public profile: facts and reviews, no scores |
-| `/worker/onboarding` | Conversational AI sign-up |
+| `/worker/onboarding` | Conversational sign-up — the AI asks, never assumes |
 | `/verify` | Aadhaar verification (simulated, KYC-ready) |
-| `/post` | Job posting — the AI asks instead of assuming |
-| `/job/[id]` | Live job: call, WhatsApp, Maps, SOS, chat, payment, review |
-| `/hire` | Bulk hiring for societies and businesses |
-| `/jobs`, `/me` | My jobs, profile and settings |
+| `/book` | Seven-step booking request |
+| `/job/[id]` | Contact Hub, live map, payment, cancellation, SOS, chat |
+| `/hire` | Bulk and recurring-shift hiring for societies and businesses |
+| `/earnings` | Worker earnings across seven time ranges |
+| `/jobs`, `/me` | Bookings, profile, saved places, payment method, logout |
+| `/trust` | Trust & Safety centre |
 | `/join`, `/qr` | QR onboarding landing page and printable poster |
-
-## Demo accounts
-
-No registration needed — one tap on `/login`:
-
-| Role | Who | Phone |
-|---|---|---|
-| Worker | Ramesh Kumar, electrician, Aadhaar verified | 9000000001 |
-| Resident | Priya Menon | 9000000002 |
-| Society | Anil Sharma, Green Valley Apartments | 9000000003 |
-| Business | Rakesh Sharma, Sharma Kirana Store | 9000000004 |
-
-OTP is always **123456**.
 
 ## Architecture
 
 ```
-app/                 Next.js App Router pages (all client components)
+app/                 Next.js App Router pages (client components)
+  layout.tsx         providers, no-flash theme script
+  not-found.tsx      404 — a server component with no dependencies
+  error.tsx          error boundary with a recovery action
 components/
-  aurora.tsx         Aurora motion + surface component library
-  theme.tsx          adaptive dark mode, no flash on first paint
-  store.tsx          the "API" — every read/write goes through here
-  ui.tsx             design-system components
-  voice.tsx          Web Speech API capture with typing fallback
-  phone.tsx          phone + OTP step
-  chat.tsx           auto-translating conversation
+  store.tsx          the "API" — every read and write goes through here
+  aurora.tsx         motion + surface library
+  kit.tsx            shell, top bar, voice field, empty states
+  contact.tsx        the Contact Hub a confirmed booking opens on
+  map.tsx            OpenStreetMap tiles, no SDK and no API key
+  chart.tsx          the earnings chart
+  panels.tsx         desktop context panels
+  city.tsx           city and locality picker
 lib/
-  types.ts           domain model (becomes your DB schema)
-  geo.ts             haversine distance + hyperlocal priority bands
-  i18n.ts            en / hi / ta / te / ml / kn dictionaries
-  seed.ts            14 workers, 2 residents, 3 open jobs
-  tiers.ts           trust tiers, streaks, endorsements, leaderboard, ETA
-  activity.ts        deterministic live-activity feed
-  selftest.ts        npm run test
-  ai/
-    taxonomy.ts      trades, multilingual keywords, rate card
-    profile.ts       #1 #2  voice → skills, experience, category
-    jobs.ts          #3     request → category, urgency, duration
-    pricing.ts       #6     fair price range
-    matching.ts      #4 #5  explainable worker ranking
-    translate.ts     #4     multilingual chat
-    trust.ts         #7     three-dimension reputation score
-    scrap.ts         #8     scrap material recognition
+  types.ts           domain model — becomes the DB schema unchanged
+  cities.ts          12 cities, 78 localities, deterministic scatter
+  catalog.ts         13 categories → 47 services
+  i18n*.ts           ten languages, completeness enforced by the compiler
+  earnings.ts        pure earnings maths
+  shifts.ts          recurring rotas
+  payments.ts        Razorpay-shaped state machine
+  cancellation.ts    the published fee schedule
+  verify.ts          Verhoeff checksum; stores last 4 digits only
+  tiles.ts           slippy-map projection
+  seed.ts            113 workers, 85 jobs, a year of history
+  selftest.ts        npm test
+  ai/                profile, request, pricing, matching
 ```
 
-Two rules make phase 2 painless:
+Two rules keep phase 2 cheap:
 
-1. **Every AI function is already `async` and returns a typed object.**
-   Replacing a rule-based body with `await fetch('/api/...')` changes nothing
-   upstream.
+1. **Every AI function is already `async` and returns a typed object.** Swapping
+   a rule-based body for `await fetch('/api/…')` changes nothing upstream.
 2. **Every read and write goes through `components/store.tsx`.** Moving from
-   localStorage to Postgres means rewriting that one file.
+   localStorage to Postgres means rewriting one file.
 
-## The AI layer
+## Decisions worth defending
 
-| # | Feature | Now (phase 1) | Phase 2 |
-|---|---|---|---|
-| 1 | Voice → profile | Web Speech API + keyword extraction | Whisper/Sarvam STT + Claude |
-| 2 | Skill extraction | multilingual keyword taxonomy | Claude structured output |
-| 3 | Job understanding | keyword + urgency detection | Claude structured output |
-| 4 | Translation | 24-phrase book × 6 languages | Claude, phrase book as cache |
-| 5 | Hyperlocal ranking | explainable weighted score | + semantic skill similarity |
-| 6 | Fair pricing | transparent rate card | Claude over real job history |
-| 7 | Trust scoring | 3 yes/no → 3 dimensions | + review-text sentiment |
-| 8 | Scrap recognition | deterministic from file | Claude vision |
-| 9 | Demand analytics | live aggregation | forecasting + alerts |
+- **Ten languages, enforced by the type system.** The dictionary is
+  `Record<Key, string>` — not `Partial` — so a missing translation is a build
+  error, not a screen that silently falls back to English. 3,180 strings.
+- **The AI asks instead of assuming.** A worker who says only *"I am an
+  electrician"* is asked how many years, which services, which languages.
+  `experienceYears` is `number | null`; unstated renders as `—`, never a
+  number the product invented.
+- **Strict trade matching.** An electrician is never shown a cooking job — the
+  rule lives in one function and is pinned by tests.
+- **Real distances.** Every worker and job is scattered deterministically
+  inside its locality, so nothing is ever "0 m away".
+- **No API keys anywhere.** Map tiles are plain image requests. Calling,
+  WhatsApp and navigation are deep links. There is no key to leak.
+- **Aadhaar: last four digits only.** Full numbers go to the KYC provider and
+  are discarded. Asserted in the test suite.
+- **No gamification.** No points, tiers, streaks or leaderboards. A worker is
+  facts and reviews.
+- **The phone is the base layer.** Desktop is built on top at 1024/1440/1920,
+  never at the phone's expense.
 
-The ranking score is deliberately *explainable* — each worker card can show
-exactly why it ranked where it did. In a trust-critical marketplace that beats
-a black box.
+## Verification
+
+`npm test` covers the logic layer end to end — 223 assertions including the
+regressions that have actually happened: overnight shifts costed as negative
+hours, workers at exactly zero distance, an AI inventing years of experience,
+the prerender crash that broke a deploy.
+
+`npm run ssr` renders all 16 routes through `react-dom/server` — the same
+operation a production build performs — because a route that works in `npm run
+dev` can still fail the build, and that failure is invisible until you deploy.
 
 ## Deploying
 
-See **[DEPLOY.md](./DEPLOY.md)** — GitHub, then Vercel, step by step.
-
-## Design decisions worth defending
-
-- **Voice-first, not voice-optional.** The mic is the primary control on the
-  profile screen; typing is the fallback, not the default.
-- **Six languages everywhere**, including the seeded workers' own words.
-- **The worker sets the radius**, so nobody is shown a job they cannot reach.
-- **Three yes/no questions instead of star ratings** — a worker who is skilled
-  but occasionally late shows up as exactly that, not as "4.1 stars".
-- **Price is a range with a stated basis**, so neither side is negotiating
-  blind.
-- **QR onboarding** because the hardest step for this user is *finding* the
-  platform at all.
+See **[DEPLOY.md](./DEPLOY.md)** and **[PUSH.md](./PUSH.md)**.

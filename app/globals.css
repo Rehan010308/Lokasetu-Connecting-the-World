@@ -1111,6 +1111,64 @@ select.input option { background: var(--canvas-2); color: var(--ink); }
 .scroll-x::-webkit-scrollbar { display: none; }
 .scroll-x > * { scroll-snap-align: start; flex: none; }
 
+/* ------------------------------------------------------ 15a0. BOOKING FLOW */
+
+/*
+ * The booking wizard is one card with a fixed action bar under it.
+ *
+ * Previously the step content animated inside AnimatePresence while the
+ * Continue button sat loose in the page flow directly after it — so every step
+ * change moved the button, and on the short steps it floated in the middle of
+ * nowhere. Giving the content a min-height and the actions their own bar means
+ * the button stays where the thumb last left it.
+ */
+.book {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.book-card {
+  display: flex;
+  flex-direction: column;
+  /* enough that a two-line step and a seven-item step do not move the footer */
+  min-height: 320px;
+}
+.book-card > section { flex: 1; }
+
+.book-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hairline-2);
+  margin-top: auto;
+}
+
+@media (min-width: 768px) {
+  .book-card { min-height: 380px; }
+}
+
+@media (min-width: 1024px) {
+  .book-card {
+    min-height: 420px;
+    padding: 32px;
+    border-radius: var(--r-xl);
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+    box-shadow: var(--lift-2);
+    backdrop-filter: blur(var(--blur)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  }
+  .book-actions {
+    flex-direction: row-reverse;
+    justify-content: flex-start;
+    border-top: none;
+    padding-top: 0;
+  }
+  .book-actions .btn { width: auto; min-width: 220px; }
+  .book-actions .btn.quiet { min-width: 0; }
+}
+
 /* ------------------------------------------------------------- 15a1. CITY */
 
 .city-btn {
@@ -1675,7 +1733,21 @@ label.lbl { display: block; font-size: 13.5px; font-weight: 700; color: var(--in
      no panel, so they centre instead of stretching. */
   .shell:not(:has(> .dock)) > .page,
   .shell:not(:has(> .dock)) > .ptr-host,
-  .shell:not(:has(> .dock)) > .topbar { max-width: 720px; margin-inline: auto; }
+  .shell:not(:has(> .dock)) > .topbar { max-width: 860px; margin-inline: auto; width: 100%; }
+
+  /* A conversational sign-up on a laptop should not be a phone column with
+     600px of empty space either side of it. More width, more air, and the
+     choice lists go two-up so the whole step is visible without scrolling. */
+  .shell:not(:has(> .dock)) > .page { padding-top: 24px; }
+  .shell:not(:has(> .dock)) .choice { min-height: 64px; }
+  .shell:not(:has(> .dock)) .v-3 > .choice { font-size: 16px; }
+  .shell:not(:has(> .dock)) .turnstack { max-height: 46vh; overflow-y: auto; }
+
+  /* Fallback for engines without :has() — without this the focused flows
+     would stretch edge to edge instead of merely being narrow. */
+  @supports not selector(:has(*)) {
+    .shell > .page, .shell > .ptr-host, .shell > .topbar { max-width: 1100px; margin-inline: auto; }
+  }
 
   .page { padding: 0 0 72px; }
 

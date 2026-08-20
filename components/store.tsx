@@ -9,9 +9,24 @@ import { EMPTY_PAYMENT, amountFor } from '@/lib/payments';
 import { cancelTerms, type CancelActor } from '@/lib/cancellation';
 import { seedDB, DEMO_ACCOUNTS } from '@/lib/seed';
 import { geoOf } from '@/lib/cities';
+import { VERSION } from '@/lib/version';
 import { makeT, type TKey } from '@/lib/i18n';
 
 const STORAGE_KEY = 'lokasetu:v2';
+
+/**
+ * What is on disk, plus the build that put it there.
+ *
+ * Storage outlives deployments. A browser that used an older version keeps its
+ * data, and the next version reads that older shape as if it wrote it — which
+ * fails somewhere far from the cause, usually as a blank screen. Stamping the
+ * version means a mismatch is detected on read and thrown away, and the demo
+ * simply reseeds. Cheap, and it removes an entire category of "works for me".
+ */
+interface Stored {
+  version: string;
+  db: DB;
+}
 
 /**
  * Phase 1 persistence: the browser.
@@ -56,14 +71,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      const parsed = raw ? (JSON.parse(raw) as DB) : null;
-      if (parsed && Array.isArray(parsed.workers) && Array.isArray(parsed.clients) && parsed.workers.length) {
-        setDb(parsed);
-      } else {
-        setDb(seedDB());
-      }
+      const stored = raw ? (JSON.parse(raw) as Stored) : null;
+      const usable =
+        stored?.version === VERSION &&
+        stored.db &&
+        Array.isArray(stored.db.workers) && stored.db.workers.length > 0 &&
+        Array.isArray(stored.db.clients) &&
+        Array.isArray(stored.db.jobs);
+
+      setDb(usable ? stored!.db : seedDB());
     } catch {
-      /* corrupt storage — a fresh seed is always better than a broken app */
+      /* corrupt or foreign storage — a fresh seed always beats a broken app */
       setDb(seedDB());
     }
     setReady(true);
@@ -71,7 +89,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!ready) return;
-    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch {}
+    try {
+      const payload: Stored = { version: VERSION, db };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch { /* quota or private mode — the app works, it just will not persist */ }
   }, [db, ready]);
 
   const update = useCallback((fn: (d: DB) => DB) => setDb((prev) => fn({ ...prev })), []);
@@ -87,14 +108,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as DB;
-      if (parsed && Array.isArray(parsed.workers) && Array.isArray(parsed.clients)) setDb(parsed);
+      const stored = JSON.parse(raw) as Stored;
+      if (stored?.version === VERSION && stored.db && Array.isArray(stored.db.workers)) setDb(stored.db);
     } catch { /* leave the in-memory copy alone */ }
   }, []);
   const reset = useCallback(() => {
     const fresh = seedDB();
     setDb(fresh);
-    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)); } catch {}
+    try {
+      const payload: Stored = { version: VERSION, db: fresh };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {}
   }, []);
 
   const value = useMemo(() => ({ db, ready, update, reset, refresh }), [db, ready, update, reset, refresh]);

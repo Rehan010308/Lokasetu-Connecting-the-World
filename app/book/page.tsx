@@ -7,7 +7,8 @@ import { categoryName, serviceName } from '@/lib/i18n-catalog';
 import { parseRequest } from '@/lib/ai/request';
 import { suggestPrice } from '@/lib/ai/pricing';
 import { rankWorkers, etaMinutes } from '@/lib/ai/match';
-import { AREAS, nearestArea, formatDistance } from '@/lib/geo';
+import { nearestArea, formatDistance } from '@/lib/geo';
+import { CITIES, city, geoOf } from '@/lib/cities';
 import { TRUST_POINTS } from '@/lib/payments';
 import type { DurationEstimate, Geo, TimePreference } from '@/lib/types';
 import { useActions, useMe, useStore, useT } from '@/components/store';
@@ -72,11 +73,23 @@ function Book() {
   const [photos, setPhotos] = React.useState<string[]>([]);
   const [timePref, setTimePref] = React.useState<TimePreference>('asap');
   const [scheduled, setScheduled] = React.useState('');
-  const [address, setAddress] = React.useState(me.geo.address ?? '');
-  const [geo, setGeo] = React.useState<Geo>(me.geo);
+  const [address, setAddress] = React.useState('');
+  const [geo, setGeo] = React.useState<Geo | null>(null);
   const [duration, setDuration] = React.useState<DurationEstimate>('hr1');
   const [price, setPrice] = React.useState<{ min: number; max: number; basis: string } | null>(null);
   const [thinking, setThinking] = React.useState(false);
+  /**
+   * BUG: describing the problem could bounce the user back to "Describe".
+   *
+   * afterDescribe() sends people to the service picker when the AI cannot work
+   * out the trade — correct, it must not guess. But the picker's Continue went
+   * to STEPS[idx + 1], which IS 'describe'. So the user described the job,
+   * picked a trade, and was asked to describe it again. The text was still
+   * there, but being re-asked reads as data loss.
+   *
+   * This remembers that we detoured, so picking a trade resumes forward.
+   */
+  const [detoured, setDetoured] = React.useState(false);
 
   React.useEffect(() => {
     if (ready && (!me.role || me.role === 'worker')) router.replace('/');
@@ -85,6 +98,30 @@ function Book() {
   React.useEffect(() => { if (me.geo.address && !address) setAddress(me.geo.address); }, [me.geo.address]);
 
   const idx = STEPS.indexOf(step);
+  /**
+   * BUG: the booking always offered Bengaluru.
+   *
+   * Two causes. The location dropdown listed AREAS — a six-item Bengaluru
+   * compatibility shim — instead of the user's own city. And `geo` was seeded
+   * from `me.geo` in a useState initialiser, which runs on the FIRST render,
+   * when the store is still empty and me.geo is the fallback. A customer in
+   * Mumbai got Koramangala on both counts.
+   *
+   * Now: nothing is assumed until the profile has actually loaded, and then the
+   * booking starts from where that profile says the person is.
+   */
+  React.useEffect(() => {
+    if (!ready || geo) return;
+    setGeo(me.geo);
+    setAddress(me.geo.address ?? '');
+  }, [ready, me.geo, geo]);
+
+  /* Areas belong to the user's city, never a hardcoded list. */
+  const localities = React.useMemo(
+    () => city(geo?.cityId ?? me.geo.cityId ?? 'blr')?.localities ?? [],
+    [geo?.cityId, me.geo.cityId]
+  );
+
   const go = (s: Step) => setStep(s);
 
   /** After the description, let the AI propose a service and a duration. */
@@ -93,7 +130,7 @@ function Book() {
     const parsed = await parseRequest(description, lang);
     if (!svc && parsed.serviceId) { setSvc(parsed.serviceId); setCat(parsed.category ?? null); }
     // Could not work out the trade from what they said — ask, do not guess.
-    if (!svc && !parsed.serviceId) { setThinking(false); go('service'); return; }
+    if (!svc && !parsed.serviceId) { setThinking(false); setDetoured(true); go('service'); return; }
     setDuration(durationFromHours(parsed.estimatedHours));
     setThinking(false);
     go('photos');
@@ -117,14 +154,14 @@ function Book() {
 
   /* Only workers who genuinely do this service, inside their own radius. */
   const suitable = React.useMemo(() => {
-    if (!svc || !cat) return [];
+    if (!svc || !cat || !geo) return [];
     const all = rankWorkers({ geo, category: cat, serviceId: svc }, db.workers);
     if (!preferredWorker) return all;
     return [...all].sort((a, b) => (a.worker.id === preferredWorker ? -1 : b.worker.id === preferredWorker ? 1 : 0));
   }, [svc, cat, geo, db.workers, preferredWorker]);
 
   function send() {
-    if (!svc || !cat || !me.id || !me.role || me.role === 'worker' || !price) return;
+    if (!svc || !cat || !me.id || !me.role || me.role === 'worker' || !price || !geo) return;
     const hours = DURATIONS.find((d) => d.id === duration)?.hours ?? 1;
     const id = requestBooking({
       clientId: me.id,
@@ -149,7 +186,8 @@ function Book() {
     router.push(`/job/${id}`);
   }
 
-  if (!ready) return <Shell><div className="page" style={{ paddingTop: 90 }}><CardSkeleton /></div></Shell>;
+  /* `geo` lands in the effect above, one tick after `ready`. */
+  if (!ready || !geo) return <Shell><div className="page" style={{ paddingTop: 90 }}><CardSkeleton /></div></Shell>;
 
   const canNext =
     step === 'service'  ? !!svc :
@@ -165,7 +203,8 @@ function Book() {
         right={<Ring value={Math.round(((idx + 1) / STEPS.length) * 100)} size="s" label={`${idx + 1}/${STEPS.length}`} />}
       />
 
-      <main className="page v-4" style={{ paddingTop: 4 }}>
+      <main className="page book" style={{ paddingTop: 4 }}>
+        <div className="book-card">
         <AnimatePresence mode="wait">
           <motion.section
             key={step}
@@ -285,16 +324,51 @@ function Book() {
                   <h1 className="t-h1">{t('b.address')}</h1>
                   <p className="t-sm" style={{ marginTop: 6 }}>{t('b.addressSub')}</p>
                 </div>
-                <button className="btn ghost" onClick={() => navigator.geolocation?.getCurrentPosition(
-                  (p) => setGeo(nearestArea(p.coords.latitude, p.coords.longitude)), () => {}, { timeout: 8000 })}>
-                  📍 {t('b.useCurrent')}
-                </button>
-                <input className="input" value={address} onChange={(e) => setAddress(e.target.value)}
-                  placeholder={t('p.wherePh')} aria-label={t('b.address')} />
-                <select className="select" value={geo.areaName}
-                  onChange={(e) => { const a = AREAS.find((x) => x.areaName === e.target.value); if (a) setGeo({ ...a, address }); }}>
-                  {AREAS.map((a) => <option key={a.areaName} value={a.areaName}>{a.areaName}</option>)}
-                </select>
+                {/* The city is already known from the profile. Confirm it, do
+                    not re-ask it — and lead with the only thing that actually
+                    varies per booking: which flat, which floor, which gate. */}
+                <div className="note em">📍 {geo.areaName}</div>
+
+                <input
+                  className="input"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder={t('b.flatPh')}
+                  aria-label={t('b.address')}
+                  autoFocus
+                />
+
+                <details className="glass flat pad-s">
+                  <summary className="t-xs strong" style={{ cursor: 'pointer' }}>
+                    ✏️ {t('c.changeCity')} · {t('c.area')}
+                  </summary>
+                  <div className="v-3" style={{ marginTop: 12 }}>
+                    <button className="btn ghost sm" onClick={() => navigator.geolocation?.getCurrentPosition(
+                      (p) => setGeo({ ...nearestArea(p.coords.latitude, p.coords.longitude), address }),
+                      () => {}, { timeout: 8000 })}>
+                      📍 {t('b.useCurrent')}
+                    </button>
+                    <select
+                      className="input"
+                      value={geo.cityId ?? 'blr'}
+                      aria-label={t('c.city')}
+                      onChange={(e) => {
+                        const target = city(e.target.value);
+                        if (target) setGeo({ ...geoOf(target.localities[0].id)!, address });
+                      }}
+                    >
+                      {CITIES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <select
+                      className="input"
+                      value={geo.localityId ?? ''}
+                      aria-label={t('c.area')}
+                      onChange={(e) => { const g = geoOf(e.target.value); if (g) setGeo({ ...g, address }); }}
+                    >
+                      {localities.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </div>
+                </details>
               </>
             ) : null}
 
@@ -379,8 +453,13 @@ function Book() {
             ) : null}
           </motion.section>
         </AnimatePresence>
+        </div>
 
-        {/* ---------------------------- footer ---------------------------- */}
+        {/* ---------------------------- footer ----------------------------
+            Inside its own bar rather than loose in the page flow. The button
+            used to sit directly after an animating section, so every step
+            change moved it — which is what made it look detached. */}
+        <div className="book-actions">
         {step !== 'workers' ? (
           <button
             className="btn"
@@ -388,6 +467,8 @@ function Book() {
             onClick={() => {
               if (step === 'describe') return afterDescribe();
               if (step === 'duration') return afterDuration();
+              /* resume forward after the trade detour instead of re-asking */
+              if (step === 'service' && detoured) { setDetoured(false); return go('photos'); }
               go(STEPS[idx + 1]);
             }}
           >
@@ -402,6 +483,7 @@ function Book() {
         {step !== 'service' && step !== 'workers' && step !== 'describe' && step !== 'address' ? (
           <button className="btn quiet" onClick={() => go(STEPS[idx + 1])}>{t('c.skip')}</button>
         ) : null}
+        </div>
       </main>
     </Shell>
   );
