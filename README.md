@@ -88,18 +88,23 @@ Open <http://localhost:3000>.
 
 ```powershell
 npm run verify
-npm run ssr
 npm run build
 ```
 
-- `npm run verify` — TypeScript, then 212 assertions over the negotiation
-  rules, the connection state machine, the formatters and all ten languages.
-- `npm run ssr` — renders every route through `react-dom/server`, the same
-  operation the production build performs. This is what catches a crash that
-  only happens during prerendering.
-- `npm run build` — the real production build.
+- `npm run verify` — TypeScript, then 213 assertions over the negotiation
+  rules, the connection state machine, the normalisers, the formatters and all
+  ten languages.
+- `npm run build` — the real production build. If it succeeds locally, the
+  Vercel build succeeds.
 
-If all three pass locally, the Vercel build passes.
+Two extra tools ship with the project:
+
+- `npm run ssr` renders every route through `react-dom/server` — the same
+  operation the production build performs — which catches a crash that only
+  happens during prerendering.
+- `npm run preview` writes `preview.html` and `preview-dark.html`: the real
+  components with real props and the real stylesheet, in one page you can open
+  in a browser to review the design without a dev server.
 
 ### 1.5 Push to GitHub, which redeploys Vercel
 

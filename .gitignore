@@ -16,5 +16,3 @@ _legacy
 preview.html
 preview-dark.html
 shot-*.png
-design-preview.tsx
-ssr-check.tsx
