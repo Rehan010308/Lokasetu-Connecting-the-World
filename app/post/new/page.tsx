@@ -4,11 +4,12 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/shell';
 import { Guard } from '@/components/guard';
-import { Banner, Button, Card, Field, Segment } from '@/components/ui';
+import { Banner, Button, Card, Field } from '@/components/ui';
 import { useAuth, useLang, useToast } from '@/components/providers';
-import { AlertTriangle, IndianRupee, Link2, MapPin, Send } from '@/components/icons';
-import { createPost } from '@/lib/queries';
-import { CATEGORIES, CITIES } from '@/lib/catalog';
+import { AlertTriangle, IndianRupee, Link2, Lock, MapPin, Send } from '@/components/icons';
+import { createPost, savePrivateDetails } from '@/lib/queries';
+import { locality } from '@/lib/contact';
+import { CATEGORIES } from '@/lib/catalog';
 import { categoryKey } from '@/lib/i18n';
 import { parseAmount } from '@/lib/format';
 import type { PostType } from '@/lib/database.types';
@@ -19,14 +20,17 @@ function Composer() {
   const router = useRouter();
   const toast = useToast();
 
-  // A worker posting an update is the common case; an employer posting a job is
-  // the other. Default to whichever matches the account.
-  const [type, setType] = useState<PostType>(profile?.role === 'employer' ? 'job' : 'update');
+  // The account decides what this is. A resident posts job requests; a worker
+  // posts availability updates. There is no toggle because there is no choice —
+  // and a `posts_guard_role` trigger refuses anything else at the database.
+  const type: PostType = profile?.role === 'employer' ? 'job' : 'update';
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<string>(profile?.skills[0] ?? 'electrical');
   const [budget, setBudget] = useState('');
-  const [location, setLocation] = useState(profile?.location ?? '');
+  const [flat, setFlat] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [notes, setNotes] = useState('');
   const [media, setMedia] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,16 +61,31 @@ function Composer() {
       content,
       category,
       budget: amount,
-      location,
+      // Locality only, and derived from the profile — never typed again, and
+      // never precise enough to identify a door.
+      location: locality(profile) || profile?.location || null,
       media_url: media,
     });
-    setBusy(false);
 
     if (result.error || !result.data) {
+      setBusy(false);
       setError(result.error ?? t('somethingWrong'));
       return;
     }
 
+    // The exact address goes to `private_details`, not onto the public post.
+    // Only a worker with an accepted offer on this job can read it back.
+    if (type === 'job' && (flat.trim() || landmark.trim() || notes.trim())) {
+      await savePrivateDetails({
+        owner_id: userId as string,
+        post_id: result.data.id,
+        flat_number: flat,
+        landmark,
+        notes,
+      });
+    }
+
+    setBusy(false);
     toast(t('saved'), 'ok');
     router.push(`/post/${result.data.id}`);
   }
@@ -86,15 +105,15 @@ function Composer() {
             </Banner>
           ) : null}
 
-          <Segment<PostType>
-            block
-            value={type}
-            onChange={setType}
-            options={[
-              { value: 'job', label: t('typeJob') },
-              { value: 'update', label: t('typeUpdate') },
-            ]}
-          />
+          <div className="panel row" style={{ gap: 8 }}>
+            <Lock size={15} style={{ color: 'var(--ink-3)' }} />
+            <span className="small strong grow">
+              {type === 'job' ? t('typeJob') : t('typeUpdate')}
+            </span>
+            <span className="tiny dim" style={{ textAlign: 'right' }}>
+              {type === 'job' ? t('onlyResidentsPostJobs') : t('onlyWorkersPostUpdates')}
+            </span>
+          </div>
 
           <Field label={t('titleLabel')} optional htmlFor="title">
             <input
@@ -152,26 +171,50 @@ function Composer() {
               </Field>
             ) : null}
 
-            <Field label={t('locationLabel')} optional htmlFor="location">
-              <div className="input-group">
-                <span className="lead">
-                  <MapPin size={16} />
-                </span>
+            {type === 'job' ? (
+              <Field label={t('flatLabel')} optional htmlFor="flat">
                 <input
-                  id="location"
+                  id="flat"
                   className="input"
-                  list="composer-cities"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  value={flat}
+                  onChange={(e) => setFlat(e.target.value)}
                 />
-                <datalist id="composer-cities">
-                  {CITIES.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
-              </div>
-            </Field>
+              </Field>
+            ) : null}
           </div>
+
+          {type === 'job' ? (
+            <>
+              <div className="panel">
+                <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+                  <MapPin size={15} style={{ color: 'var(--ink-3)' }} />
+                  <span className="small strong grow">{t('jobAddressTitle')}</span>
+                  <span className="badge">{locality(profile) || t('areaLabel')}</span>
+                </div>
+                <p className="tiny dim">{t('jobAddressSub')}</p>
+              </div>
+
+              <Field label={t('landmarkLabel')} optional htmlFor="landmark">
+                <input
+                  id="landmark"
+                  className="input"
+                  value={landmark}
+                  onChange={(e) => setLandmark(e.target.value)}
+                />
+              </Field>
+
+              <Field label={t('notesLabel')} optional htmlFor="notes">
+                <textarea
+                  id="notes"
+                  className="textarea"
+                  style={{ minHeight: 72 }}
+                  maxLength={400}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </Field>
+            </>
+          ) : null}
 
           <Field label={t('mediaLabel')} optional htmlFor="media" hint="https://…">
             <div className="input-group">

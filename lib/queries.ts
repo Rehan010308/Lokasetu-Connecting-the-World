@@ -26,8 +26,10 @@ import {
   CONNECTION_SELECT,
   OFFER_SELECT,
   POST_SELECT,
+  PRIVATE_FIELDS,
   PROFILE_FIELDS,
   TABLE,
+  type PrivateDetailsRow,
   type ConnectionStatus,
   type PostStatus,
   type PostType,
@@ -38,6 +40,7 @@ import {
   normalizeConnection,
   normalizeOffer,
   normalizePost,
+  normalizePrivateDetails,
   normalizeProfile,
   type Connection,
   type Offer,
@@ -70,6 +73,9 @@ export interface SignUpInput {
   role: Role;
   location?: string;
   username?: string;
+  city?: string;
+  area?: string;
+  society?: string;
 }
 
 export async function signUp(input: SignUpInput): Promise<Result<{ needsConfirmation: boolean }>> {
@@ -87,6 +93,9 @@ export async function signUp(input: SignUpInput): Promise<Result<{ needsConfirma
           role: input.role,
           location: input.location?.trim() ?? '',
           username: input.username?.trim() ?? '',
+          city: input.city?.trim() ?? '',
+          area: input.area?.trim() ?? '',
+          society: input.society?.trim() ?? '',
         },
       },
     });
@@ -198,6 +207,10 @@ export interface ProfilePatch {
   username?: string;
   skills?: string[];
   hourly_rate?: number | null;
+  city?: string | null;
+  area?: string | null;
+  society?: string | null;
+  preferred_language?: string;
 }
 
 /**
@@ -541,9 +554,92 @@ export async function withdrawOffer(id: number): Promise<Result<boolean>> {
   }
 }
 
+/* ===================================================== private details == */
+
+/**
+ * The phone number and the exact address.
+ *
+ * There is no authorisation check in this function on purpose. The Row Level
+ * Security policy on `private_details` decides: the owner always sees their own
+ * row, the other party sees it once an offer between them has been accepted,
+ * and everybody else gets an empty result rather than a refusal. A locked
+ * contact panel is simply a query that came back empty.
+ */
+export async function getPrivateDetails(
+  ownerId: string,
+  postId: number | null,
+): Promise<Result<PrivateDetailsRow | null>> {
+  if (!isSupabaseConfigured()) return notConfigured(null);
+  try {
+    let query = supabase().from(TABLE.privateDetails).select(PRIVATE_FIELDS).eq('owner_id', ownerId);
+    query = postId === null ? query.is('post_id', null) : query.eq('post_id', postId);
+
+    const { data, error } = await query.maybeSingle();
+    if (error) return fail(null, describeError(error));
+    return ok(normalizePrivateDetails(data));
+  } catch (e) {
+    return fail(null, describeError(e));
+  }
+}
+
+export interface PrivateDetailsInput {
+  owner_id: string;
+  post_id: number | null;
+  phone?: string | null;
+  flat_number?: string | null;
+  landmark?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Write your own private row.
+ *
+ * Read-then-write rather than upsert: the uniqueness is enforced by two PARTIAL
+ * indexes (one for the personal row, one per job), and PostgREST's upsert
+ * cannot name a partial index as its conflict target.
+ */
+export async function savePrivateDetails(
+  input: PrivateDetailsInput,
+): Promise<Result<PrivateDetailsRow | null>> {
+  if (!isSupabaseConfigured()) return notConfigured(null);
+
+  const patch = {
+    phone: input.phone?.trim() || null,
+    flat_number: input.flat_number?.trim() || null,
+    landmark: input.landmark?.trim() || null,
+    notes: input.notes?.trim() || null,
+  };
+
+  try {
+    const existing = await getPrivateDetails(input.owner_id, input.post_id);
+    if (existing.error) return existing;
+
+    if (existing.data) {
+      const { data, error } = await supabase()
+        .from(TABLE.privateDetails)
+        .update(patch)
+        .eq('id', existing.data.id)
+        .select(PRIVATE_FIELDS)
+        .maybeSingle();
+      if (error) return fail(null, describeError(error));
+      return ok(normalizePrivateDetails(data));
+    }
+
+    const { data, error } = await supabase()
+      .from(TABLE.privateDetails)
+      .insert({ owner_id: input.owner_id, post_id: input.post_id, ...patch })
+      .select(PRIVATE_FIELDS)
+      .maybeSingle();
+    if (error) return fail(null, describeError(error));
+    return ok(normalizePrivateDetails(data));
+  } catch (e) {
+    return fail(null, describeError(e));
+  }
+}
+
 /* ============================================================== realtime == */
 
-export type RealtimeTable = 'posts' | 'offers' | 'connections' | 'profiles';
+export type RealtimeTable = 'posts' | 'offers' | 'connections' | 'profiles' | 'private_details';
 
 /**
  * Live updates. Returns an unsubscribe function, always — including when

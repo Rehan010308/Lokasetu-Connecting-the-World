@@ -9,6 +9,7 @@
  */
 
 import type {
+  PrivateDetailsRow,
   ConnectionRow,
   ConnectionStatus,
   OfferRow,
@@ -71,6 +72,25 @@ export function normalizeProfile(raw: any): Profile | null {
     skills: Array.isArray(raw.skills) ? raw.skills.filter((s: unknown) => typeof s === 'string') : [],
     hourly_rate: num(raw.hourly_rate),
     verified: Boolean(raw.verified),
+    city: raw.city ?? null,
+    area: raw.area ?? null,
+    society: raw.society ?? null,
+    preferred_language: typeof raw.preferred_language === 'string' ? raw.preferred_language : 'en',
+  };
+}
+
+export function normalizePrivateDetails(raw: any): PrivateDetailsRow | null {
+  if (!raw || raw.id === undefined || raw.id === null) return null;
+  return {
+    id: Number(raw.id),
+    owner_id: String(raw.owner_id ?? ''),
+    post_id: raw.post_id === null || raw.post_id === undefined ? null : Number(raw.post_id),
+    phone: raw.phone ?? null,
+    flat_number: raw.flat_number ?? null,
+    landmark: raw.landmark ?? null,
+    notes: raw.notes ?? null,
+    created_at: raw.created_at ?? new Date(0).toISOString(),
+    updated_at: raw.updated_at ?? raw.created_at ?? new Date(0).toISOString(),
   };
 }
 

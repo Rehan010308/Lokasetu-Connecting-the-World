@@ -28,7 +28,7 @@ import {
   type LangCode,
   type TKey,
 } from '@/lib/i18n';
-import { ensureProfile, signOut as signOutQuery } from '@/lib/queries';
+import { ensureProfile, signOut as signOutQuery, updateProfile } from '@/lib/queries';
 import { isDemoProfile, seedDemoContent } from '@/lib/demo';
 import { supabase } from '@/utils/supabase/client';
 import { isSupabaseConfigured } from '@/utils/supabase/config';
@@ -220,11 +220,16 @@ const AuthContext = createContext<AuthCtx>({
 export const useAuth = () => useContext(AuthContext);
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { lang, setLang } = useContext(LangContext);
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [profile, setProfileState] = useState<Profile | null>(null);
   const seeded = useRef<Set<string>>(new Set());
+  // Read inside loadProfile without making it depend on `lang`, which would
+  // rebuild the callback on every language change and refetch the profile.
+  const langRef = useRef<LangCode>('en');
+  langRef.current = lang;
 
   const configured = isSupabaseConfigured();
 
@@ -234,6 +239,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       if (result.data) {
         setProfileState(result.data);
 
+        // The language choice follows the account, not the browser: sign in on
+        // a borrowed phone and the app is still in your language.
+        const saved = result.data.preferred_language;
+        if (isLangCode(saved) && saved !== langRef.current) setLang(saved);
+
         // Demo accounts get their sample content the first time they appear.
         // Guarded by a ref so a re-render never triggers a second pass.
         if (isDemoProfile(result.data) && !seeded.current.has(id)) {
@@ -242,8 +252,15 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [],
+    [setLang],
   );
+
+  // Persist a language change back to the profile, so it survives a new device.
+  useEffect(() => {
+    if (!profile || profile.preferred_language === lang) return;
+    setProfileState({ ...profile, preferred_language: lang });
+    void updateProfile(profile.id, { preferred_language: lang });
+  }, [lang, profile]);
 
   useEffect(() => {
     if (!configured) {

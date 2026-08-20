@@ -7,8 +7,9 @@ import { AppShell, LanguagePicker, ThemeToggle } from '@/components/shell';
 import { Guard } from '@/components/guard';
 import { Avatar, Badge, Banner, Button, Card, Chip, Field } from '@/components/ui';
 import { useAuth, useLang, useToast } from '@/components/providers';
-import { AlertTriangle, ArrowUpRight, IndianRupee, Link2, Lock, LogOut, MapPin, ShieldCheck } from '@/components/icons';
-import { updateProfile } from '@/lib/queries';
+import { AlertTriangle, ArrowUpRight, IndianRupee, Link2, Lock, LogOut, MapPin, Phone, ShieldCheck } from '@/components/icons';
+import { getPrivateDetails, savePrivateDetails, updateProfile } from '@/lib/queries';
+import { isPhone, normalizePhone } from '@/lib/contact';
 import { CATEGORIES, CITIES } from '@/lib/catalog';
 import { categoryKey } from '@/lib/i18n';
 import { normalizeUsername, parseAmount, rupees } from '@/lib/format';
@@ -28,6 +29,10 @@ function MyProfile() {
   const [avatar, setAvatar] = useState('');
   const [rate, setRate] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
+  const [city, setCity] = useState('');
+  const [area, setArea] = useState('');
+  const [society, setSociety] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -42,7 +47,23 @@ function MyProfile() {
     setAvatar(profile.avatar_url ?? '');
     setRate(profile.hourly_rate ? String(profile.hourly_rate) : '');
     setSkills(profile.skills);
+    setCity(profile.city ?? '');
+    setArea(profile.area ?? '');
+    setSociety(profile.society ?? '');
   }, [profile]);
+
+  // The phone number is not on the profile row. It lives in `private_details`,
+  // which nobody but you and an accepted counterparty can read.
+  useEffect(() => {
+    if (!profile) return;
+    let alive = true;
+    getPrivateDetails(profile.id, null).then((result) => {
+      if (alive) setPhone(result.data?.phone ?? '');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [profile?.id]);
 
   if (!profile) return null;
 
@@ -73,20 +94,34 @@ function MyProfile() {
       }
     }
 
+    if (phone.trim() && !isPhone(phone)) {
+      setError(t('phoneLabel'));
+      return;
+    }
+
     setBusy(true);
     const result = await updateProfile(profile.id, {
       full_name: fullName.trim() || handle,
       username: handle,
       bio: bio.trim() || null,
-      location: location.trim() || null,
+      location: [area.trim(), city.trim()].filter(Boolean).join(', ') || null,
       avatar_url: avatar.trim() || null,
       skills: isWorker ? skills : [],
       hourly_rate: hourly,
+      city: city.trim() || null,
+      area: area.trim() || null,
+      society: society.trim() || null,
+    });
+
+    const contact = await savePrivateDetails({
+      owner_id: profile.id,
+      post_id: null,
+      phone: phone.trim() ? normalizePhone(phone) : null,
     });
     setBusy(false);
 
-    if (result.error) {
-      setError(result.error);
+    if (result.error || contact.error) {
+      setError(result.error ?? contact.error);
       return;
     }
     await refreshProfile();
@@ -174,18 +209,41 @@ function MyProfile() {
             />
           </Field>
 
+          <Field
+            label={t('phoneLabel')}
+            optional
+            htmlFor="me-phone"
+            hint={t('contactLocked')}
+          >
+            <div className="input-group">
+              <span className="lead">
+                <Phone size={16} />
+              </span>
+              <input
+                id="me-phone"
+                className="input"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="9876543210"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+          </Field>
+
           <div className="grid-2">
-            <Field label={t('cityLabel')} optional htmlFor="me-location">
+            <Field label={t('cityLabel')} optional htmlFor="me-city">
               <div className="input-group">
                 <span className="lead">
                   <MapPin size={16} />
                 </span>
                 <input
-                  id="me-location"
+                  id="me-city"
                   className="input"
                   list="me-cities"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
                 />
                 <datalist id="me-cities">
                   {CITIES.map((name) => (
@@ -193,6 +251,15 @@ function MyProfile() {
                   ))}
                 </datalist>
               </div>
+            </Field>
+
+            <Field label={t('areaLabel')} optional htmlFor="me-area">
+              <input
+                id="me-area"
+                className="input"
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+              />
             </Field>
 
             {isWorker ? (
@@ -212,6 +279,15 @@ function MyProfile() {
               </Field>
             ) : null}
           </div>
+
+          <Field label={t('societyLabel')} optional htmlFor="me-society">
+            <input
+              id="me-society"
+              className="input"
+              value={society}
+              onChange={(e) => setSociety(e.target.value)}
+            />
+          </Field>
 
           <Field label={t('mediaLabel')} optional htmlFor="me-avatar" hint="https://…">
             <div className="input-group">

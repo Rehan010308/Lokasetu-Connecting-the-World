@@ -59,6 +59,16 @@ import {
 import { CATEGORIES, CATEGORY_IDS, CITIES, categoryById } from './catalog';
 import { LANGS, LANG_CODES, T_KEYS, categoryKey, isLangCode, translate } from './i18n';
 import { describeError } from './errors';
+import {
+  contactOwnerId,
+  contactView,
+  fullAddress,
+  isPhone,
+  locality,
+  mapsUrl,
+  normalizePhone,
+  telUrl,
+} from './contact';
 import { DEMO_ACCOUNTS, DEMO_USERNAMES, demoAccountFor, isDemoUsername } from './demo-accounts';
 import { VERSION } from './version';
 
@@ -98,6 +108,10 @@ function profile(over: Partial<Profile> & { id: string }): Profile {
     skills: over.skills ?? [],
     hourly_rate: over.hourly_rate ?? null,
     verified: over.verified ?? false,
+    city: over.city ?? null,
+    area: over.area ?? null,
+    society: over.society ?? null,
+    preferred_language: over.preferred_language ?? 'en',
   };
 }
 
@@ -422,6 +436,70 @@ ok('a network failure names the variable', describeError({ message: 'Failed to f
 eq('no error still returns a sentence', describeError(null), 'Something went wrong.');
 eq('an unknown error keeps its message', describeError({ message: 'kaboom' }), 'kaboom');
 
+/* ============================================ 7b. contact and address == */
+
+section('contact reveal');
+
+{
+  const pending = offer({ status: 'pending' });
+  const accepted = offer({ status: 'accepted' });
+
+  ok('a pending offer reveals nothing to the worker', !contactView(pending, WORKER.id).revealed);
+  ok('a pending offer reveals nothing to the employer', !contactView(pending, EMPLOYER.id).revealed);
+  ok('an accepted offer reveals contact to the worker', contactView(accepted, WORKER.id).revealed);
+  ok('an accepted offer reveals contact to the employer', contactView(accepted, EMPLOYER.id).revealed);
+  ok('an accepted offer reveals nothing to a stranger', !contactView(accepted, STRANGER.id).revealed);
+  ok('an accepted offer reveals nothing when signed out', !contactView(accepted, null).revealed);
+  ok('a declined offer reveals nothing', !contactView(offer({ status: 'declined' }), WORKER.id).revealed);
+  ok('a countered offer reveals nothing', !contactView(offer({ status: 'countered' }), WORKER.id).revealed);
+
+  ok('the worker gets the address', contactView(accepted, WORKER.id).seesAddress);
+  ok('the employer does not need an address', !contactView(accepted, EMPLOYER.id).seesAddress);
+  eq('the worker sees the employer', contactView(accepted, WORKER.id).person?.id, EMPLOYER.id);
+  eq('the employer sees the worker', contactView(accepted, EMPLOYER.id).person?.id, WORKER.id);
+  eq('a stranger sees nobody', contactView(accepted, STRANGER.id).person, null);
+
+  eq('the worker reads the employer private row', contactOwnerId(accepted, WORKER.id), EMPLOYER.id);
+  eq('the employer reads the worker private row', contactOwnerId(accepted, EMPLOYER.id), WORKER.id);
+  eq('a stranger reads nobody', contactOwnerId(accepted, STRANGER.id), null);
+}
+
+{
+  const resident = profile({
+    id: 'r1',
+    role: 'employer',
+    city: 'Bengaluru',
+    area: 'Koramangala',
+    society: 'Green Valley Apartments',
+    location: 'Koramangala, Bengaluru',
+  });
+
+  eq('locality is area and city only', locality(resident), 'Koramangala, Bengaluru');
+  eq('locality never includes the society', locality(resident).includes('Green Valley'), false);
+  eq('locality falls back to the free-text location', locality(profile({ id: 'x', location: 'Mumbai' })), 'Mumbai');
+  eq('nobody has no locality', locality(null), '');
+
+  const details = { id: 1, owner_id: 'r1', post_id: 5, phone: '+919876543210', flat_number: 'B-402', landmark: 'opposite the water tank', notes: null, created_at: '', updated_at: '' };
+  eq('the full address assembles in order', fullAddress(resident, details), 'B-402, Green Valley Apartments, Koramangala, near opposite the water tank, Bengaluru');
+  eq('a missing private row still yields the locality parts', fullAddress(resident, null), 'Green Valley Apartments, Koramangala, Bengaluru');
+  eq('no profile and no details is empty', fullAddress(null, null), '');
+}
+
+ok('the maps link is the documented universal URL', mapsUrl('B-402, Koramangala').startsWith('https://www.google.com/maps/search/?api=1&query='));
+ok('the maps query is encoded', mapsUrl('B-402, Koramangala').includes('B-402%2C%20Koramangala'));
+eq('no address, no link', mapsUrl('   '), '');
+ok('the maps link needs no API key', !mapsUrl('anywhere').includes('key='));
+
+eq('a ten digit number is a phone', isPhone('9876543210'), true);
+eq('spaces and dashes are ignored', isPhone('98765-43210'), true);
+eq('nine digits is not a phone', isPhone('987654321'), false);
+eq('fourteen digits is not a phone', isPhone('98765432101234'), false);
+eq('a ten digit number gains +91', normalizePhone('9876543210'), '+919876543210');
+eq('an existing country code is kept once', normalizePhone('+91 98765 43210'), '+919876543210');
+eq('nothing normalises to nothing', normalizePhone(''), '');
+eq('the dial link strips punctuation', telUrl('+91 98765-43210'), 'tel:+919876543210');
+eq('no number, no dial link', telUrl(null), '');
+
 /* ================================================ 8. schema agreement == */
 
 section('schema agreement');
@@ -431,7 +509,7 @@ eq('two post types', [...POST_TYPES], ['job', 'update']);
 eq('four post statuses', POST_STATUSES.length, 4);
 eq('four connection statuses', CONNECTION_STATUSES.length, 4);
 eq('four offer statuses', OFFER_STATUSES.length, 4);
-eq('the table names are the schema table names', Object.values(TABLE), ['profiles', 'posts', 'connections', 'offers']);
+eq('the table names are the schema table names', Object.values(TABLE), ['profiles', 'posts', 'connections', 'offers', 'private_details']);
 
 ok('the profile field list has no trailing comma', !PROFILE_FIELDS.trim().endsWith(','));
 ok('the offer select names the employer relationship explicitly', OFFER_SELECT.includes('offers_employer_id_fkey'));
@@ -522,6 +600,7 @@ ok('every demo skill is a real category', DEMO_ACCOUNTS.every((a) => a.skills.ev
 section('version');
 
 ok('the version looks like a version', /^\d+\.\d+\.\d+$/.test(VERSION));
+ok('the private details table is named', Object.values(TABLE).includes('private_details'));
 
 /* ====================================================== the verdict == */
 

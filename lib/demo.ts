@@ -15,7 +15,7 @@
  * with no seeding step and no SQL to paste.
  */
 
-import { createPost, getProfileByUsername, listPosts, signIn, signUp, updateProfile, createOffer, listMyOffers } from './queries';
+import { createPost, getProfileByUsername, listPosts, signIn, signUp, updateProfile, createOffer, listMyOffers, savePrivateDetails } from './queries';
 import type { Profile } from './model';
 import {
   DEMO_ACCOUNTS,
@@ -123,15 +123,26 @@ export async function seedDemoContent(profile: Profile): Promise<void> {
       location: profile.location || account.location,
       skills: profile.skills.length ? profile.skills : account.skills,
       hourly_rate: profile.hourly_rate ?? account.hourlyRate,
+      city: profile.city ?? 'Bengaluru',
+      area: profile.area ?? 'Koramangala',
+      society: profile.society ?? (profile.role === 'employer' ? 'Green Valley Apartments' : null),
     });
   }
+
+  // A demo phone number, so the contact reveal has something to reveal once an
+  // offer is accepted. It goes to `private_details`, not to the profile.
+  await savePrivateDetails({
+    owner_id: profile.id,
+    post_id: null,
+    phone: profile.role === 'employer' ? '+919845012345' : '+919845067890',
+  });
 
   const existing = await listPosts({ authorId: profile.id, limit: 1 });
   if (existing.error || existing.data.length > 0) return;
 
   if (profile.role === 'employer') {
     for (const post of EMPLOYER_POSTS) {
-      await createPost({
+      const created = await createPost({
         user_id: profile.id,
         post_type: 'job',
         title: post.title,
@@ -140,6 +151,15 @@ export async function seedDemoContent(profile: Profile): Promise<void> {
         budget: post.budget,
         location: account.location,
       });
+      if (created.data) {
+        await savePrivateDetails({
+          owner_id: profile.id,
+          post_id: created.data.id,
+          flat_number: 'B-402',
+          landmark: 'opposite the Jyoti Nivas college gate',
+          notes: 'Lift is on the left. Ring the bell twice, it sticks.',
+        });
+      }
     }
     await seedOpeningOffer(profile);
   } else {

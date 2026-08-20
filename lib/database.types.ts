@@ -47,6 +47,35 @@ export interface ProfileRow {
   skills: string[];
   hourly_rate: number | null;
   verified: boolean;
+  /* Locality-level address. Safe to show before a booking is accepted —
+     this is the "area only" the spec asks for. */
+  city: string | null;
+  area: string | null;
+  society: string | null;
+  preferred_language: string;
+}
+
+/**
+ * `public.private_details` — the phone number and the exact address.
+ *
+ * Deliberately NOT columns on `profiles`. Row Level Security is per row, not
+ * per column, and `profiles` has to be world-readable because it is the
+ * directory of who does what work. A phone column there would be readable by
+ * anyone holding the anon key regardless of what the UI renders.
+ *
+ *   post_id === null  -> this person's own contact details
+ *   post_id !== null  -> the exact address for one specific job
+ */
+export interface PrivateDetailsRow {
+  id: number;
+  owner_id: string;
+  post_id: number | null;
+  phone: string | null;
+  flat_number: string | null;
+  landmark: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** `public.posts` */
@@ -96,6 +125,7 @@ export const TABLE = {
   posts: 'posts',
   connections: 'connections',
   offers: 'offers',
+  privateDetails: 'private_details',
 } as const;
 
 /* ------------------------------------------------ what we ask PostgREST for */
@@ -109,7 +139,7 @@ export const TABLE = {
  * constraint names Postgres generates for the schema in `supabase/schema.sql`.
  */
 export const PROFILE_FIELDS =
-  'id, created_at, updated_at, username, full_name, avatar_url, bio, location, role, skills, hourly_rate, verified';
+  'id, created_at, updated_at, username, full_name, avatar_url, bio, location, role, skills, hourly_rate, verified, city, area, society, preferred_language';
 
 export const POST_SELECT =
   `id, created_at, user_id, content, media_url, title, category, budget, location, post_type, status, author:profiles(${PROFILE_FIELDS})`;
@@ -124,3 +154,6 @@ export const CONNECTION_SELECT =
   `id, created_at, requester_id, receiver_id, status,` +
   ` requester:profiles!connections_requester_id_fkey(${PROFILE_FIELDS}),` +
   ` receiver:profiles!connections_receiver_id_fkey(${PROFILE_FIELDS})`;
+
+export const PRIVATE_FIELDS =
+  'id, owner_id, post_id, phone, flat_number, landmark, notes, created_at, updated_at';

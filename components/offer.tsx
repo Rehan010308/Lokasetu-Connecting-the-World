@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Avatar, Badge, Button, Card, Field, Modal } from './ui';
+import { ContactCard } from './contact-card';
 import { useLang, useToast } from './providers';
 import { ArrowLeftRight, Check, IndianRupee, Send, Trash2, X } from './icons';
 import { acceptOffer, counterOffer, createOffer, declineOffer, withdrawOffer } from '@/lib/queries';
@@ -334,6 +335,12 @@ export function OfferCard({
           </div>
         </>
       )}
+
+      {/* Locked until accepted, then name, phone and — for the worker — the
+          address with a Maps link. The lock is enforced by RLS, not here. */}
+      <div style={{ padding: '0 15px 15px' }}>
+        <ContactCard offer={offer} />
+      </div>
 
       <PriceForm
         open={countering}

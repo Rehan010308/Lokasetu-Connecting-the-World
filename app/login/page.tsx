@@ -29,6 +29,8 @@ function LoginScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');
+  const [area, setArea] = useState('');
+  const [society, setSociety] = useState('');
   const [role, setRole] = useState<Role>('worker');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -72,7 +74,16 @@ function LoginScreen() {
       return;
     }
 
-    const created = await signUp({ email, password, fullName, role, location: city });
+    const created = await signUp({
+      email,
+      password,
+      fullName,
+      role,
+      location: [area, city].filter(Boolean).join(', ') || city,
+      city,
+      area,
+      society,
+    });
     if (created.error) {
       setBusy(null);
       setError(created.error);
@@ -233,20 +244,43 @@ function LoginScreen() {
                   </div>
                 </Field>
 
-                <Field label={t('cityLabel')} optional htmlFor="city">
+                {/* Asked once, here. The job composer never asks for a city
+                    again — it reads these three back off the profile. */}
+                <div className="grid-2">
+                  <Field label={t('cityLabel')} optional htmlFor="city">
+                    <input
+                      id="city"
+                      className="input"
+                      list="lokasetu-cities"
+                      autoComplete="address-level2"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                    />
+                    <datalist id="lokasetu-cities">
+                      {CITIES.map((name) => (
+                        <option key={name} value={name} />
+                      ))}
+                    </datalist>
+                  </Field>
+
+                  <Field label={t('areaLabel')} optional htmlFor="area">
+                    <input
+                      id="area"
+                      className="input"
+                      autoComplete="address-level3"
+                      value={area}
+                      onChange={(e) => setArea(e.target.value)}
+                    />
+                  </Field>
+                </div>
+
+                <Field label={t('societyLabel')} optional htmlFor="society">
                   <input
-                    id="city"
+                    id="society"
                     className="input"
-                    list="lokasetu-cities"
-                    autoComplete="address-level2"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
+                    value={society}
+                    onChange={(e) => setSociety(e.target.value)}
                   />
-                  <datalist id="lokasetu-cities">
-                    {CITIES.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
                 </Field>
               </>
             ) : null}
