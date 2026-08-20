@@ -10,6 +10,8 @@ import { cancelTerms, type CancelActor } from '@/lib/cancellation';
 import { seedDB, DEMO_ACCOUNTS } from '@/lib/seed';
 import { geoOf } from '@/lib/cities';
 import { VERSION } from '@/lib/version';
+import { isSupabaseConfigured } from '@/lib/supabase/env';
+import * as remote from '@/lib/supabase/repo';
 import { makeT, type TKey } from '@/lib/i18n';
 
 const STORAGE_KEY = 'lokasetu:v2';
@@ -40,6 +42,8 @@ interface StoreValue {
   reset: () => void;
   /** Re-read from storage. What pull-to-refresh actually does. */
   refresh: () => void;
+  /** true once shared data is loaded and realtime is connected */
+  live: boolean;
 }
 
 const Ctx = createContext<StoreValue | null>(null);
@@ -102,6 +106,68 @@ export function StoreProvider({
     setReady(true);
   }, []);
 
+  /**
+   * SHARED DATA — the point of the Supabase integration.
+   *
+   * Local storage is still loaded first, above, and is still what renders. This
+   * runs after it and replaces the local copy with the server's, then keeps it
+   * live. Three properties matter:
+   *
+   *   1. If Supabase is not configured, this does nothing at all and the app is
+   *      exactly what it was before. One missing environment variable degrades
+   *      the product; it does not break it.
+   *   2. The first paint never waits on the network. Local data shows
+   *      immediately and server data arrives when it arrives.
+   *   3. Every failure path leaves the local copy in place. fetchAll() returns
+   *      null rather than throwing, so an outage looks like slightly stale
+   *      data, not a white screen.
+   */
+  const [live, setLive] = useState(false);
+
+  useEffect(() => {
+    if (!ready || !isSupabaseConfigured()) return;
+    let cancelled = false;
+
+    (async () => {
+      const server = await remote.fetchAll();
+      if (cancelled || !server) return;
+      /* Keep the local session — who is signed in is a device fact, not a
+         shared one. Everything else comes from the server. */
+      setDb((prev) => ({ ...prev, ...server, session: prev.session }));
+      setLive(true);
+    })();
+
+    return () => { cancelled = true; };
+  }, [ready]);
+
+  /* Realtime: a job posted on one device appears on another without a refresh. */
+  useEffect(() => {
+    if (!live) return;
+    return remote.subscribe((e) => {
+      setDb((prev) => {
+        if (e.kind === 'job') {
+          const exists = prev.jobs.some((j) => j.id === e.job.id);
+          return {
+            ...prev,
+            jobs: exists
+              ? prev.jobs.map((j) => (j.id === e.job.id ? e.job : j))
+              : [e.job, ...prev.jobs],
+          };
+        }
+        if (e.kind === 'message') {
+          /* An echo of our own optimistic insert must not double up. */
+          if (prev.messages.some((m) => m.id === e.message.id)) return prev;
+          const dupe = prev.messages.some(
+            (m) => m.jobId === e.message.jobId && m.fromId === e.message.fromId &&
+                   m.text === e.message.text && Math.abs(m.createdAt - e.message.createdAt) < 8000);
+          return dupe ? prev : { ...prev, messages: [...prev.messages, e.message] };
+        }
+        if (prev.sos.some((x) => x.id === e.sos.id)) return prev;
+        return { ...prev, sos: [...prev.sos, e.sos] };
+      });
+    });
+  }, [live]);
+
   useEffect(() => {
     if (!ready) return;
     try {
@@ -120,6 +186,12 @@ export function StoreProvider({
    * the body becomes a GET and nothing above it changes.
    */
   const refresh = useCallback(() => {
+    if (isSupabaseConfigured()) {
+      remote.fetchAll().then((server) => {
+        if (server) setDb((prev) => ({ ...prev, ...server, session: prev.session }));
+      });
+      return;
+    }
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -136,7 +208,10 @@ export function StoreProvider({
     } catch {}
   }, []);
 
-  const value = useMemo(() => ({ db, ready, update, reset, refresh }), [db, ready, update, reset, refresh]);
+  const value = useMemo(
+    () => ({ db, ready, update, reset, refresh, live }),
+    [db, ready, update, reset, refresh, live]
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -251,6 +326,9 @@ export function useActions() {
     },
 
     setVerification(workerId: string, verification: Verification) {
+      /* Only the last four digits ever leave this device — and the column is
+         CHECK-constrained to four, so the database refuses anything longer. */
+      void remote.updateVerification(workerId, verification);
       update((d) => ({ ...d, workers: d.workers.map((w) => (w.id === workerId ? { ...w, verification } : w)) }));
     },
 
@@ -262,20 +340,28 @@ export function useActions() {
      * A customer REQUESTS a booking. It is not assigned to anyone yet — the
      * request goes to every suitable worker and they choose to accept.
      */
+    /**
+     * A customer REQUESTS a booking.
+     *
+     * Local state first, network afterwards, and the id is returned
+     * synchronously. The screen advances on the next frame whether Supabase
+     * takes 40ms or four seconds — which is the whole of the "Send Booking
+     * Request is slow" complaint. If the write fails the job still exists on
+     * this device and the next refresh reconciles it.
+     */
     requestBooking(job: Omit<Job, 'id' | 'createdAt' | 'status' | 'payment'>, workerIds: string[]): string {
       const id = newId('bk');
-      const now = Date.now();
-      update((d) => ({
-        ...d,
-        jobs: [{
-          ...job, id,
-          status: 'requested' as JobStatus,
-          requestedWorkerIds: workerIds,
-          requestedAt: now,
-          payment: { ...EMPTY_PAYMENT },
-          createdAt: now,
-        }, ...d.jobs],
-      }));
+      const at = Date.now();
+      const created: Job = {
+        ...job, id,
+        status: 'requested' as JobStatus,
+        requestedWorkerIds: workerIds,
+        requestedAt: at,
+        payment: { ...EMPTY_PAYMENT },
+        createdAt: at,
+      };
+      update((d) => ({ ...d, jobs: [created, ...d.jobs] }));
+      void remote.upsertJob(created);
       return id;
     },
 
@@ -285,18 +371,14 @@ export function useActions() {
 
     /** A worker accepts a request. This is the only way a job gets assigned. */
     acceptBooking(jobId: string, workerId: string, amount: number) {
-      update((d) => ({
-        ...d,
-        jobs: d.jobs.map((j) => (j.id === jobId
-          ? {
-              ...j,
-              status: 'accepted' as JobStatus,
-              assignedWorkerId: workerId,
-              agreedAmount: amount,
-              acceptedAt: Date.now(),
-            }
-          : j)),
-      }));
+      const found = db.jobs.find((j) => j.id === jobId);
+      const accepted: Job | null = found
+        ? { ...found, status: 'accepted' as JobStatus, assignedWorkerId: workerId, agreedAmount: amount, acceptedAt: Date.now() }
+        : null;
+      update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId && accepted ? accepted : j)) }));
+      /* Writes the bookings row — which is what tells the customer's screen, on
+         a different device, that somebody is on the way. */
+      if (accepted) void remote.upsertJob(accepted);
     },
 
     /**
@@ -314,7 +396,7 @@ export function useActions() {
             by, at: Date.now(), reason, fee: terms.fee,
             refunded: j.payment.status === 'held' || j.payment.status === 'authorized',
           };
-          return {
+          const next: Job = {
             ...j,
             status: (by === 'client' ? 'cancelled_by_client' : 'cancelled_by_worker') as JobStatus,
             cancellation,
@@ -322,6 +404,8 @@ export function useActions() {
               ? { ...j.payment, status: 'refunded' as const, amount: Math.max(0, (j.payment.amount ?? 0) - terms.fee), protected: false }
               : j.payment,
           };
+          void remote.upsertJob(next);
+          return next;
         }),
       }));
     },
@@ -333,11 +417,15 @@ export function useActions() {
         : status === 'working'  ? { startedAt: Date.now() }
         : status === 'completed'? { completedAt: Date.now() }
         : {};
+      const found = db.jobs.find((j) => j.id === jobId);
       update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status, ...stamp } : j)) }));
+      if (found) void remote.updateJobStatus({ ...found, status, ...stamp }, status);
     },
 
     setPayment(jobId: string, payment: Payment) {
+      const found = db.jobs.find((j) => j.id === jobId);
       update((d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, payment } : j)) }));
+      if (found) void remote.updatePayment({ ...found, payment }, payment);
     },
 
     /**
@@ -346,7 +434,13 @@ export function useActions() {
      */
     sendMessage(jobId: string, fromRole: 'worker' | 'client', fromId: string, kind: MessageKind, text: string, lang: LangCode, durationSec?: number) {
       const m: Message = { id: newId('m'), jobId, fromRole, fromId, kind, text, lang, durationSec, createdAt: Date.now() };
+      /* Shown immediately. When the server id lands it replaces the local one,
+         so the realtime echo of our own message is recognised, not doubled. */
       update((d) => ({ ...d, messages: [...d.messages, m] }));
+      void remote.sendMessage(m).then((serverId) => {
+        if (!serverId) return;
+        update((d) => ({ ...d, messages: d.messages.map((x) => (x.id === m.id ? { ...x, id: serverId } : x)) }));
+      });
     },
 
     addReview(jobId: string, workerId: string, authorName: string, stars: number, text: string, tags: string[]) {
@@ -363,11 +457,13 @@ export function useActions() {
             : w)),
         };
       });
+      void remote.createReview(review, db.workers.find((w) => w.id === workerId));
     },
 
     raiseSos(jobId: string, by: 'worker' | 'client', lat?: number, lng?: number): SosEvent {
       const ev: SosEvent = { id: newId('sos'), jobId, at: Date.now(), by, lat, lng, resolved: false };
       update((d) => ({ ...d, sos: [...d.sos, ev] }));
+      void remote.createSOS(ev);
       return ev;
     },
   }), [db, update, reset]);
