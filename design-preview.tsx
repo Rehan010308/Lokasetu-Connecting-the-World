@@ -48,6 +48,10 @@ const employer: Profile = {
   skills: [],
   hourly_rate: null,
   verified: true,
+  city: 'Bengaluru',
+  area: 'Koramangala',
+  society: 'Green Valley Apartments',
+  preferred_language: 'en',
 };
 
 const worker: Profile = {
@@ -63,6 +67,10 @@ const worker: Profile = {
   skills: ['electrical', 'appliance'],
   hourly_rate: 450,
   verified: true,
+  city: 'Bengaluru',
+  area: 'Koramangala',
+  society: null,
+  preferred_language: 'en',
 };
 
 const third: Profile = {
