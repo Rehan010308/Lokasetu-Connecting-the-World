@@ -7,5 +7,5 @@
  * unpacking the oldest one. The version is printed in the app so the answer is
  * visible instead of inferred.
  */
-export const VERSION = '4.1.2';
+export const VERSION = '4.1.3';
 export const BUILD = 'multi-city · desktop deck · earnings · vercel-ready';

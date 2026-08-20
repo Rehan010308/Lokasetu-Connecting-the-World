@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import type { TKey } from '@/lib/i18n';
 import { POLICY_ROWS } from '@/lib/cancellation';
 import { useMe, useT } from '@/components/store';
 import { Dock, GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
@@ -19,11 +20,25 @@ import { navNormal, navWorker } from '@/components/nav';
    lib/cancellation.ts. Nothing on this page is marketing.
    =========================================================================== */
 
-type Section = { icon: string; titleKey: any; bodyKey: any; href?: string; hrefLabel?: string };
+/**
+ * The keys are typed as TKey, not `any`.
+ *
+ * They were `any`, which is how `hrefLabel` ended up a bare `string` and broke
+ * the production type check — and worse, why a typo in any of these fourteen
+ * keys would have shipped as a blank line on screen instead of failing to
+ * compile. `href` and its label travel together in one optional object so that
+ * checking for the link narrows the label too.
+ */
+type Section = {
+  icon: string;
+  titleKey: TKey;
+  bodyKey: TKey;
+  link?: { href: string; label: TKey };
+};
 
 const SECTIONS: Section[] = [
   { icon: '🔒', titleKey: 'ts.securePay',      bodyKey: 'tb.pay' },
-  { icon: '✅', titleKey: 'ts.verifiedWorker', bodyKey: 'tb.verify',  href: '/verify', hrefLabel: 'v.title' },
+  { icon: '✅', titleKey: 'ts.verifiedWorker', bodyKey: 'tb.verify', link: { href: '/verify', label: 'v.title' } },
   { icon: '🆘', titleKey: 'ts.emergency',      bodyKey: 'tb.sos' },
   { icon: '🕵️', titleKey: 'ts.fraud',          bodyKey: 'tb.fraud' },
   { icon: '🔐', titleKey: 'ts.privacy',        bodyKey: 'tb.privacy' },
@@ -62,9 +77,9 @@ export default function TrustPage() {
                   <div className="grow">
                     <h3 className="t-h3">{t(s.titleKey)}</h3>
                     <p className="t-sm" style={{ marginTop: 6 }}>{t(s.bodyKey)}</p>
-                    {s.href ? (
-                      <Link href={s.href} className="btn sm ghost" style={{ marginTop: 12 }}>
-                        {t(s.hrefLabel)} →
+                    {s.link ? (
+                      <Link href={s.link.href} className="btn sm ghost" style={{ marginTop: 12 }}>
+                        {t(s.link.label)} →
                       </Link>
                     ) : null}
                   </div>

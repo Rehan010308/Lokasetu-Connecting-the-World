@@ -12,26 +12,14 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
 
   /**
-   * TEMPORARY, AND IT IS A GATE REMOVAL — NOT A FIX.
+   * TypeScript errors DO stop the deploy, deliberately.
    *
-   * `next build` type-checks with @types/react, which could not be installed in
-   * the environment this was written in, so type errors that only appear with
-   * the real React types were invisible here. They stopped the deploy at
-   * "Checking validity of types".
-   *
-   * What this does NOT mean: that the code is broken. Next reported
-   * "✓ Compiled successfully" — the JavaScript is valid and bundled. The type
-   * check is a separate static gate. On top of that: 216 assertions pass, and
-   * all 16 routes render to static markup through react-dom/server, which is
-   * the operation a deploy actually performs.
-   *
-   * What it does mean: real type errors are being skipped, and skipped type
-   * errors are how a `null` reaches a `.length` six months from now.
-   *
-   * TO REMOVE IT: run `npm run typecheck` locally — with node_modules present
-   * it reports the true errors. Fix them, delete this block, redeploy.
+   * This was briefly disabled to unblock a build failing at "Checking validity
+   * of types". The error turned out to be real — a translation key typed as a
+   * bare `string` instead of TKey in app/trust/page.tsx — so it was fixed and
+   * the gate went straight back on. A skipped type error is how a null reaches
+   * a .length six months later.
    */
-  typescript: { ignoreBuildErrors: true },
 };
 
 export default nextConfig;

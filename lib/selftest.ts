@@ -573,6 +573,12 @@ const en = (k: any) => t('en', k);
     ok('the job page reads no clock while rendering',
        !jobPage.includes('nextOccurrence(job.shift!, Date.now())'));
 
+    /* The type gate must stay on. It was disabled once, to unblock a deploy,
+       and the error it was hiding turned out to be real. */
+    const cfg = readFileSync(new URL('../next.config.mjs', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    ok('TypeScript errors still stop the build', !cfg.includes('ignoreBuildErrors'));
+
     /* The test harness must stay out of the app's build graph. */
     const tsconfig = readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8');
     ok('the test harness is excluded from the Next build', tsconfig.includes('lib/selftest.ts'));
