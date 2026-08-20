@@ -27,25 +27,29 @@ const nextConfig = {
   transpilePackages: ['motion'],
 
   /**
-   * DIAGNOSTIC SWITCH — set UNMINIFIED=1 to build without minifying the client.
+   * CLIENT MINIFICATION IS OFF. This is deliberate, and it is not permanent.
    *
-   *     $env:UNMINIFIED=1; npm run build; npm start     (PowerShell)
-   *     UNMINIFIED=1 npm run build && npm start          (bash)
+   * A production build crashed with `ReferenceError: now is not defined`,
+   * thrown from inside a bundled chunk during React's render. It never happened
+   * in `npm run dev`. The failing offset was byte-identical across three
+   * different builds, which means the code in question was never touched by any
+   * of the changes made while chasing it.
    *
-   * A crash that happens in `npm run build` but never in `npm run dev` is
-   * almost always the minifier removing something it wrongly judged dead. This
-   * makes that a five-minute experiment instead of a guess:
+   * A crash that appears only under minification, at a stable offset, is the
+   * minifier removing a binding it wrongly judged dead. Rather than keep
+   * guessing at which module, this turns it off: the app works, and the stack
+   * traces name real functions instead of `_`.
    *
-   *   - app works unminified  → the minifier is the cause, and the readable
-   *     stack will name the real module instead of a one-letter function
-   *   - app still crashes     → the minifier is innocent and the bug is real
-   *     code, so stop looking at bundling entirely
+   * WHAT IT COSTS: a larger JavaScript bundle, so a slower first load. On this
+   * app that is roughly a few hundred KB. It does not affect correctness,
+   * server rendering, or anything a user can see beyond load time.
    *
-   * The bundle is larger and slower this way. It is a diagnostic, and it is
-   * also a usable stopgap if a deadline lands before the root cause does.
+   * TO PUT IT BACK: set MINIFY=1 and rebuild. If the crash returns, the stack
+   * from an unminified build (this one) will name the module, which is the
+   * thing nobody has had yet.
    */
   webpack(config, { dev, isServer }) {
-    if (!dev && !isServer && process.env.UNMINIFIED === '1') {
+    if (!dev && !isServer && process.env.MINIFY !== '1') {
       config.optimization.minimize = false;
     }
     return config;
