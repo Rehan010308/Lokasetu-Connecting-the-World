@@ -1,119 +1,128 @@
 'use client';
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
-import { RANGES, bestMonth, lifetime, summarise, type RangeId } from '@/lib/earnings';
-import { useMe, useStore, useT } from '@/components/store';
-import { Dock, GlassCard, Reveal } from '@/components/aurora';
-import { Empty, HeaderTools, Money, Panel, Shell, TopBar } from '@/components/kit';
-import { EarningsChart } from '@/components/chart';
-import { StatRow } from '@/components/panels';
-import { navWorker } from '@/components/nav';
+import React, { useMemo } from 'react';
+import Link from 'next/link';
+import { AppShell } from '@/components/shell';
+import { Guard } from '@/components/guard';
+import { Button, Card, EmptyState, Skeleton, Stat } from '@/components/ui';
+import { useOffers } from '@/components/data';
+import { useAuth, useLang } from '@/components/providers';
+import { TrendingUp, Wallet } from '@/components/icons';
+import { earningsFor } from '@/lib/model';
+import { compactNumber, rupees } from '@/lib/format';
 
-/**
- * EARNINGS
- *
- * The screen a worker opens most after the job feed. It answers, in this
- * order: how much did I make, over what, and which period was my best.
- *
- * Exactly one hero number — the selected range's total. Everything else is a
- * supporting tile, because a dashboard with four competing 48px numbers has no
- * headline at all.
- */
-export default function EarningsPage() {
-  const router = useRouter();
-  const { db, ready } = useStore();
-  const me = useMe();
-  const { t } = useT();
-  const [range, setRange] = React.useState<RangeId>('d30');
-  /* Read the clock once per render pass rather than per calculation, so every
-     number on the screen describes the same instant. */
-  const [now, setNow] = React.useState(0);
+function Earnings() {
+  const { t } = useLang();
+  const { userId, profile } = useAuth();
+  const { data: offers, loading } = useOffers();
 
-  React.useEffect(() => { setNow(Date.now()); }, [range]);
-  React.useEffect(() => { if (ready && me.role !== 'worker') router.replace('/'); }, [ready, me.role, router]);
+  // `new Date()` is read once per render rather than inside the pure function,
+  // so `earningsFor` stays testable with a fixed clock.
+  const summary = useMemo(() => earningsFor(offers, userId, new Date()), [offers, userId]);
 
-  if (!ready || !me.worker || !now) {
-    return <Shell><main className="page" style={{ paddingTop: 100 }}><Empty icon="⏳" text={t('c.loading')} /></main></Shell>;
+  if (profile?.role === 'employer') {
+    return (
+      <EmptyState
+        icon={<Wallet size={22} />}
+        title={t('workersOnly')}
+        body={t('earningsSub')}
+        action={
+          <Link href="/offers">
+            <Button variant="soft">{t('navOffers')}</Button>
+          </Link>
+        }
+      />
+    );
   }
 
-  const w = me.worker;
-  const s = summarise(db.jobs, w.id, range, now);
-  const life = lifetime(db.jobs, w.id);
-  const best = bestMonth(db.jobs, w.id);
-
-  return (
-    <Shell aside={
-      <>
-        <Panel title={t('e.lifetime')} icon="🏆">
-          <StatRow label={t('e.earned')} value={<Money amount={life.total} />} />
-          <StatRow label={t('d.finished')} value={life.jobs} />
-          {best ? <StatRow label={t('e.bestMonth')} value={<Money amount={best.amount} />} hint={best.label} /> : null}
-        </Panel>
-        <Panel title={t('d.help')} icon="🛟">
-          <p className="t-xs">{t('y.noteProtected')}</p>
-        </Panel>
-      </>
-    }>
-      <TopBar glassy back title={t('e.title')} subtitle={w.name} right={<HeaderTools />} />
-      <main className="page v-4" style={{ paddingTop: 4 }}>
-
-        {/* range first — it governs everything below it */}
-        <div className="scroll-x">
-          {RANGES.map((r) => (
-            <button key={r.id} className={`chip${range === r.id ? ' on' : ''}`} onClick={() => setRange(r.id)}>
-              {t(r.key as any)}
-            </button>
+  if (loading) {
+    return (
+      <div className="stack">
+        <div className="grid-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} kind="block" />
           ))}
         </div>
+        <Skeleton kind="block" />
+      </div>
+    );
+  }
 
-        <Reveal>
-          <GlassCard className="pad v-4">
-            {/* the one hero number on this screen */}
-            <div>
-              <p className="t-micro">{t('e.earned')} · {t(RANGES.find((r) => r.id === range)!.key as any)}</p>
-              <p className="hero t-num"><Money amount={s.total} /></p>
-            </div>
+  if (summary.jobs === 0) {
+    return (
+      <>
+        <div className="page-head">
+          <h1>{t('earningsTitle')}</h1>
+          <p className="lede">{t('earningsSub')}</p>
+        </div>
+        <EmptyState
+          icon={<Wallet size={22} />}
+          title={t('noEarningsTitle')}
+          body={t('noEarningsBody')}
+          action={
+            <Link href="/offers">
+              <Button variant="soft">{t('navOffers')}</Button>
+            </Link>
+          }
+        />
+      </>
+    );
+  }
 
-            <EarningsChart buckets={s.buckets} best={s.best} />
-          </GlassCard>
-        </Reveal>
+  const peak = Math.max(...summary.buckets.map((b) => b.total), 1);
 
-        <div className="grid-2">
-          <GlassCard className="pad-s mid">
-            <div className="stat">
-              <div className="n t-num">{s.jobs}</div>
-              <div className="l">{t('d.finished')}</div>
-            </div>
-          </GlassCard>
-          <GlassCard className="pad-s mid">
-            <div className="stat">
-              <div className="n t-num"><Money amount={s.average} /></div>
-              <div className="l">{t('e.perJob')}</div>
-            </div>
-          </GlassCard>
+  return (
+    <>
+      <div className="page-head">
+        <h1>{t('earningsTitle')}</h1>
+        <p className="lede">{t('earningsSub')}</p>
+      </div>
+
+      <div className="grid-4" style={{ marginBottom: 18 }}>
+        <Stat hero label={t('lifetimeLabel')} value={rupees(summary.lifetime)} note={`${summary.jobs} · ${t('jobsDone')}`} />
+        <Stat label={t('thisMonth')} value={rupees(summary.thisMonth)} />
+        <Stat label={t('averageJob')} value={rupees(summary.average)} />
+        <Stat label={t('bestJob')} value={rupees(summary.best)} />
+      </div>
+
+      <Card pad="lg">
+        <div className="spread" style={{ marginBottom: 6 }}>
+          <div className="section-title" style={{ marginBottom: 0 }}>
+            <TrendingUp size={15} />
+            {t('lastSixMonths')}
+          </div>
         </div>
 
-        {/* lifetime lives in the right panel on a desktop; on a phone it goes here */}
-        <GlassCard className="pad v-3 desk-hide">
-          <h2 className="t-h3">🏆 {t('e.lifetime')}</h2>
-          <div className="kv" style={{ paddingTop: 0 }}>
-            <span className="k">{t('e.earned')}</span>
-            <span className="v t-num"><Money amount={life.total} /></span>
-          </div>
-          <div className="kv">
-            <span className="k">{t('d.finished')}</span>
-            <span className="v t-num">{life.jobs}</span>
-          </div>
-          {best ? (
-            <div className="kv">
-              <span className="k">{t('e.bestMonth')}</span>
-              <span className="v t-num"><Money amount={best.amount} /> · {best.label}</span>
-            </div>
-          ) : null}
-        </GlassCard>
-      </main>
-      <Dock items={navWorker(t)} />
-    </Shell>
+        <div className="chart">
+          {summary.buckets.map((bucket) => {
+            const height = bucket.total > 0 ? Math.max(6, Math.round((bucket.total / peak) * 100)) : 3;
+            return (
+              <div className="chart-col" key={bucket.key}>
+                <div
+                  className={`chart-bar ${bucket.total === 0 ? 'empty' : ''}`}
+                  style={{ height: `${height}%` }}
+                  title={`${bucket.label}: ${rupees(bucket.total)}`}
+                >
+                  {bucket.total === peak && bucket.total > 0 ? (
+                    <span className="bar-value">{compactNumber(bucket.total)}</span>
+                  ) : null}
+                </div>
+                <div className="chart-label">{bucket.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+export default function EarningsPage() {
+  return (
+    <AppShell>
+      <Guard>
+        <Earnings />
+      </Guard>
+    </AppShell>
   );
 }

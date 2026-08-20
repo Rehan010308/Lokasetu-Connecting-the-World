@@ -1,11 +1,6 @@
 /**
- * Build identity.
- *
- * Exists because "which build am I actually running?" turned into a guessing
- * game: Windows saves repeated downloads as lokasetu.zip, lokasetu (1).zip,
- * lokasetu (2).zip, so an extract command naming the plain file quietly kept
- * unpacking the oldest one. The version is printed in the app so the answer is
- * visible instead of inferred.
+ * One number, printed on screen and checked by `npm test`, so that what you are
+ * running is always checkable against what the README claims.
  */
-export const VERSION = '4.2.0';
-export const BUILD = 'multi-city · desktop deck · earnings';
+export const VERSION = '5.0.0';
+export const BUILD_NAME = 'Setu';

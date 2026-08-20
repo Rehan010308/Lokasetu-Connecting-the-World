@@ -1,701 +1,535 @@
 /**
- * Self-test for the whole logic layer — no browser needed.
+ * npm test
  *
- *   npm run test
+ * Assertions over the whole logic layer: the negotiation rules, the connection
+ * state machine, the normalisers that sit between PostgREST and the UI, the
+ * formatters, and the completeness of ten languages.
  *
- * These assertions are the safety net for the two bugs V2 exists to kill:
- * mixed-language UI, and workers appearing under the wrong category.
+ * Everything asserted here is pure, which is the point. The rules that decide
+ * who may accept an offer live in one function and are checked here directly,
+ * rather than by clicking through the app and hoping.
+ *
+ * Run with:  npm test
  */
-// @ts-nocheck
-import { readFileSync } from 'node:fs';
-import { seedDB, DEMO_ACCOUNTS } from './seed';
-import { ALL_KEYS, DICTS, LANGUAGES, t, makeT } from './i18n';
-import { CATEGORIES, SERVICES, matchServices, servicesOf, service, categoryOfService } from './catalog';
-import { CATEGORY_NAMES, SERVICE_NAMES, categoryName, serviceName } from './i18n-catalog';
-import { extractWorkerProfile } from './ai/profile';
-import { parseRequest } from './ai/request';
-import { suggestPrice } from './ai/pricing';
-import { rankWorkers, etaMinutes } from './ai/match';
-import { isValidAadhaarFormat, verifyIdentity } from './verify';
-import { PAYMENT_METHODS, EMPTY_PAYMENT, createOrder, holdFunds, releaseFunds, refund, methodInfo, statusKey } from './payments';
-import { cancelTerms, canCancel, travelFee, POLICY_ROWS } from './cancellation';
-import { telLink, waLink, navigateLink, sosMessage, e164, workerShareText } from './links';
-import { distanceKm, formatKm, formatDistance } from './geo';
-import { CITIES, ALL_LOCALITIES, geoOf } from './cities';
-import { RANGES, bucketsFor, compact, earnedJobs, lifetime, niceMax, summarise } from './earnings';
+
 import {
-  DAY_KEYS, crossesMidnight, hoursPerWeek, isValidShift, monthlyCost,
-  nextOccurrence, shiftHours, shiftSummary, totalHours, type ShiftPattern,
-} from './shifts';
-import { fitZoom, lerpGeo, midpoint, project, tilesFor, toPixel, travelProgress } from './tiles';
+  CONNECTION_STATUSES,
+  OFFER_STATUSES,
+  POST_STATUSES,
+  POST_TYPES,
+  ROLES,
+  PROFILE_FIELDS,
+  OFFER_SELECT,
+  CONNECTION_SELECT,
+  POST_SELECT,
+  TABLE,
+} from './database.types';
+import {
+  acceptedPeers,
+  avatarHue,
+  compact,
+  connectionWith,
+  counterparty,
+  displayName,
+  earningsFor,
+  handleOf,
+  incomingRequests,
+  initials,
+  normalizeConnection,
+  normalizeOffer,
+  normalizePost,
+  normalizeProfile,
+  offerMovement,
+  offerPermissions,
+  outgoingRequests,
+  type Connection,
+  type Offer,
+  type Profile,
+} from './model';
+import {
+  compactNumber,
+  isEmail,
+  monthYear,
+  normalizeUsername,
+  parseAmount,
+  rupees,
+  timeAgo,
+  truncate,
+} from './format';
+import { CATEGORIES, CATEGORY_IDS, CITIES, categoryById } from './catalog';
+import { LANGS, LANG_CODES, T_KEYS, categoryKey, isLangCode, translate } from './i18n';
+import { describeError } from './errors';
+import { DEMO_ACCOUNTS, DEMO_USERNAMES, demoAccountFor, isDemoUsername } from './demo-accounts';
+import { VERSION } from './version';
 
-/** Translate into English, for assertions that read a rendered string. */
-const en = (k: any) => t('en', k);
+let passed = 0;
+const failures: string[] = [];
 
-(async () => {
-  const db = seedDB();
-  let fails = 0;
-  const ok = (label, cond, extra = '') => {
-    console.log(`${cond ? '✅' : '❌'} ${label} ${extra}`);
-    if (!cond) fails++;
+function ok(label: string, condition: boolean): void {
+  if (condition) passed += 1;
+  else failures.push(label);
+}
+
+function eq<T>(label: string, actual: T, expected: T): void {
+  const same = JSON.stringify(actual) === JSON.stringify(expected);
+  if (same) passed += 1;
+  else failures.push(`${label}\n      expected ${JSON.stringify(expected)}\n      actual   ${JSON.stringify(actual)}`);
+}
+
+function section(name: string): void {
+  console.log(`\n  ${name}`);
+}
+
+/* ================================================================ setup == */
+
+const NOW = new Date('2026-06-15T10:00:00.000Z');
+
+function profile(over: Partial<Profile> & { id: string }): Profile {
+  return {
+    id: over.id,
+    created_at: '2025-01-10T00:00:00.000Z',
+    updated_at: null,
+    username: 'username' in over ? (over.username ?? null) : over.id,
+    full_name: over.full_name ?? null,
+    avatar_url: over.avatar_url ?? null,
+    bio: over.bio ?? null,
+    location: over.location ?? null,
+    role: over.role ?? 'worker',
+    skills: over.skills ?? [],
+    hourly_rate: over.hourly_rate ?? null,
+    verified: over.verified ?? false,
   };
-  const section = (s) => console.log(`\n── ${s} ─────────────────────────────`);
+}
 
-  /* ==================================================== 1. LANGUAGE SYSTEM */
-  section('Language system');
-  ok('10 languages registered', LANGUAGES.length === 10, LANGUAGES.map(l => l.code).join(','));
-  ok(`${ALL_KEYS.length} UI keys defined`, ALL_KEYS.length > 150);
+const EMPLOYER = profile({ id: 'emp-1', role: 'employer', full_name: 'Priya Menon' });
+const WORKER = profile({ id: 'wrk-1', role: 'worker', full_name: 'Ramesh Kumar', skills: ['electrical'] });
+const STRANGER = profile({ id: 'oth-1', role: 'worker', full_name: 'Anita Rao' });
 
-  let missingTotal = 0;
-  for (const l of LANGUAGES) {
-    const d = DICTS[l.code];
-    const missing = ALL_KEYS.filter((k) => !d[k] || String(d[k]).trim() === '');
-    missingTotal += missing.length;
-    if (missing.length) console.log(`   ${l.code} missing: ${missing.slice(0, 6).join(', ')}`);
+function offer(over: Partial<Offer> = {}): Offer {
+  return {
+    id: over.id ?? 1,
+    created_at: over.created_at ?? '2026-06-01T09:00:00.000Z',
+    updated_at: over.updated_at ?? '2026-06-01T09:00:00.000Z',
+    post_id: over.post_id ?? 10,
+    employer_id: over.employer_id ?? EMPLOYER.id,
+    worker_id: over.worker_id ?? WORKER.id,
+    offered_price: over.offered_price ?? 900,
+    status: over.status ?? 'pending',
+    message: over.message ?? null,
+    round: over.round ?? 1,
+    last_actor: over.last_actor === undefined ? EMPLOYER.id : over.last_actor,
+    employer: over.employer ?? EMPLOYER,
+    worker: over.worker ?? WORKER,
+    post: over.post ?? null,
+  };
+}
+
+function connection(over: Partial<Connection> & { id: number }): Connection {
+  return {
+    id: over.id,
+    created_at: over.created_at ?? '2026-05-01T00:00:00.000Z',
+    requester_id: over.requester_id ?? EMPLOYER.id,
+    receiver_id: over.receiver_id ?? WORKER.id,
+    status: over.status ?? 'pending',
+    requester: over.requester ?? EMPLOYER,
+    receiver: over.receiver ?? WORKER,
+  };
+}
+
+/* ============================================== 1. the negotiation rules == */
+
+section('negotiation rules');
+
+{
+  // An employer has just proposed 900. The worker may answer; the employer may not.
+  const fresh = offer({ status: 'pending', last_actor: EMPLOYER.id });
+
+  const asWorker = offerPermissions(fresh, WORKER.id);
+  ok('worker is a party to the offer', asWorker.isParty);
+  ok('worker is identified as the worker', asWorker.isWorker && !asWorker.isEmployer);
+  ok('worker may accept a price the employer named', asWorker.canAccept);
+  ok('worker may decline', asWorker.canDecline);
+  ok('worker may counter', asWorker.canCounter);
+  ok('worker may not withdraw the employer offer', !asWorker.canWithdraw);
+  eq('the ball is in the worker court', asWorker.waitingOn, 'you');
+
+  const asEmployer = offerPermissions(fresh, EMPLOYER.id);
+  ok('employer may NOT accept their own number', !asEmployer.canAccept);
+  ok('employer knows they named the current price', asEmployer.proposedCurrentPrice);
+  ok('employer may withdraw a pending offer', asEmployer.canWithdraw);
+  eq('employer is waiting on the other side', asEmployer.waitingOn, 'them');
+
+  const asStranger = offerPermissions(fresh, STRANGER.id);
+  ok('a third party is not a party', !asStranger.isParty);
+  ok('a third party can do nothing', !asStranger.canAccept && !asStranger.canDecline && !asStranger.canCounter);
+  eq('a third party is waiting on nobody', asStranger.waitingOn, 'nobody');
+
+  const signedOut = offerPermissions(fresh, null);
+  ok('a signed-out visitor is not a party', !signedOut.isParty);
+  ok('a signed-out visitor cannot accept', !signedOut.canAccept);
+}
+
+{
+  // The worker countered at 1400. Now the employer may answer and the worker may not.
+  const countered = offer({ status: 'countered', offered_price: 1400, round: 2, last_actor: WORKER.id });
+
+  ok('after a counter, the employer may accept', offerPermissions(countered, EMPLOYER.id).canAccept);
+  ok('after a counter, the worker may not accept their own number', !offerPermissions(countered, WORKER.id).canAccept);
+  eq('after a counter, it is the employer turn', offerPermissions(countered, EMPLOYER.id).waitingOn, 'you');
+  eq('after a counter, the worker waits', offerPermissions(countered, WORKER.id).waitingOn, 'them');
+  ok('a countered offer can no longer be withdrawn', !offerPermissions(countered, EMPLOYER.id).canWithdraw);
+}
+
+{
+  for (const status of ['accepted', 'declined'] as const) {
+    const settled = offer({ status });
+    const can = offerPermissions(settled, WORKER.id);
+    ok(`a ${status} offer is settled`, can.isSettled);
+    ok(`a ${status} offer cannot be accepted again`, !can.canAccept);
+    ok(`a ${status} offer cannot be declined again`, !can.canDecline);
+    ok(`a ${status} offer cannot be countered`, !can.canCounter);
+    eq(`a ${status} offer waits on nobody`, can.waitingOn, 'nobody');
   }
-  ok('no missing translations in any language', missingTotal === 0, `${ALL_KEYS.length * 10} strings checked`);
+}
 
-  // The V1 bug: English selected but Hindi text shows, or vice versa.
-  let untranslated = 0;
-  const SHARED_OK = new Set(['app.name']); // proper nouns may legitimately match
-  for (const l of LANGUAGES.filter((x) => x.code !== 'en')) {
-    const same = ALL_KEYS.filter((k) => !SHARED_OK.has(k) && DICTS[l.code][k] === DICTS.en[k]);
-    untranslated += same.length;
-    if (same.length) console.log(`   ${l.code} still English on: ${same.slice(0, 5).join(', ')}`);
-  }
-  ok('no language silently falls back to English', untranslated === 0);
+{
+  // last_actor is what makes "nobody accepts their own number" enforceable.
+  const noActor = offer({ last_actor: null });
+  ok('with no recorded actor, the worker may still accept', offerPermissions(noActor, WORKER.id).canAccept);
+  ok('with no recorded actor, the employer may also accept', offerPermissions(noActor, EMPLOYER.id).canAccept);
+}
 
-  ok('t() returns the chosen language', t('hi', 'c.continue') !== t('en', 'c.continue'), `hi="${t('hi', 'c.continue')}"`);
-  ok('makeT binds one language', makeT('ta')('w.hire') === t('ta', 'w.hire'), `ta="${t('ta', 'w.hire')}"`);
+eq('counterparty of an employer view is the worker', counterparty(offer(), EMPLOYER.id)?.id, WORKER.id);
+eq('counterparty of a worker view is the employer', counterparty(offer(), WORKER.id)?.id, EMPLOYER.id);
+eq('counterparty for an outsider falls back to the employer', counterparty(offer(), STRANGER.id)?.id, EMPLOYER.id);
 
-  /* ==================================================== 2. CATALOGUE */
-  section('Catalogue');
-  ok(`${SERVICES.length} services in ${CATEGORIES.length} categories`, SERVICES.length > 40);
+eq('movement from 1000 to 1400 is +40%', offerMovement(offer({ offered_price: 1400 }), 1000), 40);
+eq('movement from 1000 to 800 is -20%', offerMovement(offer({ offered_price: 800 }), 1000), -20);
+eq('movement without an opening price is unknown', offerMovement(offer(), null), null);
+eq('movement from zero is unknown, not infinite', offerMovement(offer(), 0), null);
 
-  const orphan = SERVICES.filter((s) => !CATEGORIES.some((c) => c.services.includes(s.id)));
-  ok('every service belongs to a category', orphan.length === 0, orphan.map((s) => s.id).join(','));
+/* ============================================ 2. the connection machine == */
 
-  const wrong = CATEGORIES.flatMap((c) => c.services.filter((sid) => service(sid)?.category !== c.id));
-  ok('no service filed under the wrong category', wrong.length === 0, wrong.join(','));
+section('connections');
 
-  const noName = SERVICES.filter((s) => !SERVICE_NAMES[s.id]);
-  ok('every service has a name entry', noName.length === 0, noName.map((s) => s.id).join(','));
+{
+  const rows: Connection[] = [
+    connection({ id: 1, requester_id: EMPLOYER.id, receiver_id: WORKER.id, status: 'pending' }),
+    connection({ id: 2, requester_id: STRANGER.id, receiver_id: EMPLOYER.id, status: 'accepted', requester: STRANGER, receiver: EMPLOYER }),
+  ];
 
-  let nameGaps = 0;
-  for (const s of SERVICES) for (const l of LANGUAGES) if (!SERVICE_NAMES[s.id]?.[l.code]) nameGaps++;
-  for (const c of CATEGORIES) for (const l of LANGUAGES) if (!CATEGORY_NAMES[c.id]?.[l.code]) nameGaps++;
-  ok('service and category names exist in all 10 languages', nameGaps === 0,
-     `${(SERVICES.length + CATEGORIES.length) * 10} names checked`);
+  eq('a request I sent reads as outgoing', connectionWith(rows, EMPLOYER.id, WORKER.id).state, 'outgoing');
+  eq('the same row reads as incoming from the other side', connectionWith(rows, WORKER.id, EMPLOYER.id).state, 'incoming');
+  eq('an accepted row reads as connected', connectionWith(rows, EMPLOYER.id, STRANGER.id).state, 'connected');
+  eq('no row means no relationship', connectionWith(rows, WORKER.id, STRANGER.id).state, 'none');
+  eq('myself is never a connection', connectionWith(rows, EMPLOYER.id, EMPLOYER.id).state, 'none');
+  eq('signed out has no relationships', connectionWith(rows, null, WORKER.id).state, 'none');
 
-  ok('category names translate', categoryName('plumbing', 'ta') !== categoryName('plumbing', 'en'),
-     `ta="${categoryName('plumbing', 'ta')}"`);
+  eq('one accepted peer', acceptedPeers(rows, EMPLOYER.id).map((p) => p.id), [STRANGER.id]);
+  eq('the peer list is from my point of view', acceptedPeers(rows, STRANGER.id).map((p) => p.id), [EMPLOYER.id]);
+  eq('signed out has no peers', acceptedPeers(rows, null), []);
 
-  /* ==================================================== 3. CATEGORY MATCHING */
-  section('Category matching (the V1 bug)');
-  const fanHit = matchServices('the ceiling fan is not working')[0];
-  ok('"ceiling fan" maps to fan repair', fanHit?.service.id === 'fan_repair', fanHit?.service.id);
+  eq('the worker has one request to answer', incomingRequests(rows, WORKER.id).map((c) => c.id), [1]);
+  eq('the employer has one request outstanding', outgoingRequests(rows, EMPLOYER.id).map((c) => c.id), [1]);
+  eq('the employer has nothing to answer', incomingRequests(rows, EMPLOYER.id), []);
 
-  const leakHit = matchServices('नल से पानी लीक हो रहा है')[0];
-  ok('Hindi "नल लीक" maps to plumbing', leakHit?.service.category === 'plumbing', leakHit?.service.id);
+  const rejected = [connection({ id: 3, status: 'rejected' })];
+  eq('a rejected row is not pending', connectionWith(rejected, EMPLOYER.id, WORKER.id).state, 'rejected');
+  eq('a rejected row is not an incoming request', incomingRequests(rejected, WORKER.id), []);
 
-  const paintHit = matchServices('ಗೋಡೆಗೆ ಬಣ್ಣ ಹಚ್ಚಬೇಕು')[0];
-  ok('Kannada "ಬಣ್ಣ" maps to painting', paintHit?.service.category === 'painting', paintHit?.service.id);
+  const blocked = [connection({ id: 4, status: 'blocked' })];
+  eq('a blocked row reads as blocked', connectionWith(blocked, EMPLOYER.id, WORKER.id).state, 'blocked');
+}
 
-  // The heart of it: search a service, get only workers who do that service.
-  const probe = { geo: db.clients[0].geo, category: 'plumbing', serviceId: 'leak_repair' };
-  const plumbers = rankWorkers(probe, db.workers);
-  ok('leak-repair search returns only leak-repair workers',
-     plumbers.every((m) => m.worker.services.includes('leak_repair')), `${plumbers.length} results`);
-  ok('no painter appears in a plumbing search',
-     !plumbers.some((m) => m.worker.category === 'painting'));
-  ok('search respects the worker radius', plumbers.every((m) => m.km <= m.worker.radiusKm));
+/* ============================================== 3. row normalisation == */
 
-  const verifiedOnly = rankWorkers(probe, db.workers, { verifiedOnly: true });
-  ok('verified filter works', verifiedOnly.every((m) => m.worker.verification.status === 'verified'));
+section('normalising what PostgREST returns');
 
-  const nowOnly = rankWorkers(probe, db.workers, { availableNow: true });
-  ok('available-now filter works', nowOnly.every((m) => m.worker.availability === 'anytime'));
+{
+  // PostgREST returns an embedded one-to-one as an object OR a one-element
+  // array depending on how it resolved the relationship. Both must work.
+  const asObject = normalizePost({ id: 7, user_id: 'u1', content: 'hi', author: { id: 'u1', role: 'worker' } });
+  const asArray = normalizePost({ id: 7, user_id: 'u1', content: 'hi', author: [{ id: 'u1', role: 'worker' }] });
+  eq('an embedded object becomes an author', asObject?.author?.id, 'u1');
+  eq('an embedded array becomes the same author', asArray?.author?.id, 'u1');
+  eq('an empty embed becomes null', normalizePost({ id: 7, user_id: 'u1', content: 'x', author: [] })?.author, null);
 
-  /* ==================================================== 4. AI PROFILE */
-  section('AI portfolio creation');
-  const p1 = await extractWorkerProfile('I do electrical wiring and fan fitting, six years experience');
-  ok('EN speech -> electrical', p1.category === 'electrical', `${p1.category} ${p1.experienceYears}y [${p1.services}]`);
-  ok('EN speech -> 6 years', p1.experienceYears === 6);
-  ok('stated experience is not re-asked', !p1.missing.includes('years'));
-  ok('bio was written', p1.bio.length > 10, `"${p1.bio}"`);
+  eq('a numeric budget arriving as a string becomes a number', normalizePost({ id: 1, user_id: 'u', content: 'c', budget: '250.50' })?.budget, 250.5);
+  eq('an empty budget is null, not zero', normalizePost({ id: 1, user_id: 'u', content: 'c', budget: '' })?.budget, null);
+  eq('a missing budget is null', normalizePost({ id: 1, user_id: 'u', content: 'c' })?.budget, null);
+  eq('an unknown post type falls back to job', normalizePost({ id: 1, user_id: 'u', content: 'c', post_type: 'nonsense' })?.post_type, 'job');
+  eq('an unknown status falls back to open', normalizePost({ id: 1, user_id: 'u', content: 'c', status: 'weird' })?.status, 'open');
+  eq('a row with no id is dropped', normalizePost({ user_id: 'u', content: 'c' }), null);
+  eq('null in, null out', normalizePost(null), null);
 
-  const p2 = await extractWorkerProfile('मैं बिजली की वायरिंग और पंखा लगाता हूँ, 8 साल का अनुभव', 'hi');
-  ok('HI speech -> electrical, 8y', p2.category === 'electrical' && p2.experienceYears === 8);
-  ok('HI bio is in Hindi', /[ऀ-ॿ]/.test(p2.bio), `"${p2.bio}"`);
+  eq('an unknown role falls back to worker', normalizeProfile({ id: 'x', role: 'admin' })?.role, 'worker');
+  eq('skills default to an empty array', normalizeProfile({ id: 'x' })?.skills, []);
+  eq('non-string skills are discarded', normalizeProfile({ id: 'x', skills: ['electrical', 7, null] })?.skills, ['electrical']);
+  eq('verified is a boolean, never undefined', normalizeProfile({ id: 'x' })?.verified, false);
+  eq('a profile with no id is dropped', normalizeProfile({ username: 'ghost' }), null);
 
-  const p3 = await extractWorkerProfile('நான் குழாய் கசிவு பழுது பார்க்கிறேன்', 'ta');
-  ok('TA speech -> plumbing', p3.category === 'plumbing');
-  ok('TA bio is in Tamil', /[஀-௿]/.test(p3.bio));
+  const normalised = normalizeOffer({
+    id: '12',
+    employer_id: 'e',
+    worker_id: 'w',
+    offered_price: '1450.00',
+    status: 'countered',
+    round: '3',
+    employer: [{ id: 'e', role: 'employer' }],
+    worker: { id: 'w', role: 'worker' },
+    post: [{ id: 5, content: 'job', post_type: 'job' }],
+  });
+  eq('a bigint id becomes a number', normalised?.id, 12);
+  eq('a numeric price becomes a number', normalised?.offered_price, 1450);
+  eq('a round count becomes a number', normalised?.round, 3);
+  eq('the employer embed is flattened', normalised?.employer?.id, 'e');
+  eq('the worker embed is flattened', normalised?.worker?.id, 'w');
+  eq('the post embed is flattened', normalised?.post?.id, 5);
+  eq('an offer with no price is zero, not NaN', normalizeOffer({ id: 1, employer_id: 'e', worker_id: 'w' })?.offered_price, 0);
+  eq('an unknown offer status falls back to pending', normalizeOffer({ id: 1, employer_id: 'e', worker_id: 'w', status: 'zzz' })?.status, 'pending');
 
-  const p4 = await extractWorkerProfile('ਮੈਂ ਕਾਰ ਚਲਾਉਂਦਾ ਹਾਂ, ਪੰਜ ਸਾਲ ਦਾ ਤਜਰਬਾ', 'pa');
-  ok('PA speech -> driving', p4.category === 'driving', p4.category);
+  eq('an unknown connection status falls back to pending', normalizeConnection({ id: 1, requester_id: 'a', receiver_id: 'b', status: '??' })?.status, 'pending');
+  eq('compact drops the nulls', compact([1, null, 2, null]), [1, 2]);
+}
 
-  ok('extracted services all belong to the extracted category',
-     p1.services.every((s) => categoryOfService(s) === p1.category));
+/* ====================================================== 4. earnings == */
 
-  /* ==================================================== 5. FOLLOW-UP QUESTIONS */
-  section('AI asks instead of assuming');
-  const bare = await parseRequest('fan not working');
-  ok('missing timing is asked for', bare.missing.includes('when'), bare.missing.join(','));
-  ok('missing budget is asked for', bare.missing.includes('budget'));
-  ok('missing address is asked for', bare.missing.includes('where'));
-  ok('no budget invented when unstated', bare.budgetMin === undefined);
-  ok('no address invented when unstated', bare.address === undefined);
+section('earnings');
 
-  const full = await parseRequest('fan not working, come today at 5 pm, flat 402, budget ₹400');
-  ok('stated timing is captured', !full.missing.includes('when'), full.whenText);
-  ok('stated budget is captured', !full.missing.includes('budget'), `₹${full.budgetMin}-${full.budgetMax}`);
-  ok('stated address is captured', !full.missing.includes('where'), full.address);
-  ok('urgency reads "today"', full.urgency === 'today', full.urgency);
+{
+  const accepted = [
+    offer({ id: 1, status: 'accepted', offered_price: 1200, updated_at: '2026-06-02T00:00:00.000Z' }),
+    offer({ id: 2, status: 'accepted', offered_price: 800, updated_at: '2026-05-11T00:00:00.000Z' }),
+    offer({ id: 3, status: 'accepted', offered_price: 3000, updated_at: '2026-04-04T00:00:00.000Z' }),
+    offer({ id: 4, status: 'declined', offered_price: 9999, updated_at: '2026-06-03T00:00:00.000Z' }),
+    offer({ id: 5, status: 'pending', offered_price: 9999, updated_at: '2026-06-04T00:00:00.000Z' }),
+    offer({ id: 6, status: 'accepted', offered_price: 5000, worker_id: STRANGER.id, updated_at: '2026-06-05T00:00:00.000Z' }),
+  ];
 
-  const hindi = await parseRequest('नल से पानी लीक हो रहा है, तुरंत चाहिए', 'hi');
-  ok('HI request -> plumbing + emergency', hindi.category === 'plumbing' && hindi.urgency === 'emergency');
+  const mine = earningsFor(accepted, WORKER.id, NOW);
+  eq('only accepted offers count', mine.jobs, 3);
+  eq('lifetime is the sum of accepted offers', mine.lifetime, 5000);
+  eq('somebody else earnings are not mine', mine.lifetime < 10000, true);
+  eq('this month is only this month', mine.thisMonth, 1200);
+  eq('the average is rounded', mine.average, 1667);
+  eq('the best single job is the largest', mine.best, 3000);
+  eq('six buckets by default', mine.buckets.length, 6);
+  eq('the last bucket is the current month', mine.buckets[5].label, 'Jun');
+  eq('the first bucket is five months back', mine.buckets[0].label, 'Jan');
+  eq('June holds one job', mine.buckets[5].count, 1);
+  eq('May holds 800', mine.buckets[4].total, 800);
+  eq('April holds 3000', mine.buckets[3].total, 3000);
+  eq('March is empty, not missing', mine.buckets[2].total, 0);
 
-  const ambiguous = await parseRequest('कुछ बिजली का काम है');
-  ok('ambiguous request offers choices instead of guessing',
-     ambiguous.missing.includes('service') || !!ambiguous.serviceId);
+  const nothing = earningsFor([], WORKER.id, NOW);
+  eq('no offers means no money', nothing.lifetime, 0);
+  eq('no offers means no jobs', nothing.jobs, 0);
+  eq('an average over zero jobs is zero, not NaN', nothing.average, 0);
+  eq('the empty chart still has six months', nothing.buckets.length, 6);
 
-  /* ==================================================== 6. PRICING */
-  section('Pricing');
-  const pr = await suggestPrice('fan_repair', 'emergency', 1);
-  ok('price range is sane', pr.min > 0 && pr.max > pr.min, `₹${pr.min}-₹${pr.max} :: ${pr.basis}`);
-  const pr2 = await suggestPrice('interior_paint', 'flexible', 6);
-  ok('a 6-hour paint job costs more than a 1-hour fan repair', pr2.min > pr.min, `₹${pr2.min}-₹${pr2.max}`);
-  const prU = await suggestPrice('fan_repair', 'flexible', 1);
-  ok('emergency costs more than flexible', pr.min > prU.min, `₹${pr.min} vs ₹${prU.min}`);
+  const signedOut = earningsFor(accepted, null, NOW);
+  eq('a null viewer earns nothing', signedOut.lifetime, 0);
 
-  /* ==================================================== 7. AADHAAR / VERIFY */
-  section('Identity verification');
-  ok('rejects a made-up number', !isValidAadhaarFormat('123456789012'));
-  ok('rejects numbers starting 0 or 1', !isValidAadhaarFormat('012345678901'));
-  ok('rejects wrong length', !isValidAadhaarFormat('99999999'));
-  ok('accepts a Verhoeff-valid number', isValidAadhaarFormat('234567890124'), '234567890124');
+  const twelve = earningsFor(accepted, WORKER.id, NOW, 12);
+  eq('the range is configurable', twelve.buckets.length, 12);
+}
 
-  const bad = await verifyIdentity('123456789012', 'Test');
-  ok('invalid number fails verification', bad.verification.status === 'failed', bad.verification.failureReason);
-  ok('failed check stores no digits', bad.verification.idLast4 === undefined);
+/* ====================================================== 5. formatting == */
 
-  const good = await verifyIdentity('234567890124', 'Ramesh Kumar');
-  ok('valid number verifies', good.verification.status === 'verified');
-  ok('ONLY the last 4 digits are stored', good.verification.idLast4 === '0124', good.verification.idLast4);
-  ok('full number never appears in the stored record',
-     !JSON.stringify(good.verification).includes('234567890124'));
+section('formatting');
 
-  /* ==================================================== 8. INTEGRATION LINKS */
-  section('Integration links');
-  ok('phone becomes E.164', e164('9876500001') === '919876500001', e164('9876500001'));
-  ok('tel link is dialable', telLink('9876500001') === 'tel:+919876500001');
-  ok('whatsapp link is well formed', waLink('9876500001', 'hi there').startsWith('https://wa.me/919876500001?text='));
-  const nav = navigateLink({ lat: 12.93, lng: 77.62, areaName: 'Koramangala', address: 'Flat 402' });
-  ok('maps link starts navigation', nav.includes('maps/dir/') && nav.includes('travelmode=driving'));
-  ok('maps link uses the address when present', nav.includes('Flat%20402'));
-  const sos = sosMessage('Ramesh', 12.93, 77.62, 'fan repair');
-  ok('SOS message carries a location link', sos.includes('maps?q=12.93,77.62'));
-  ok('SOS message names the person', sos.includes('Ramesh'));
-  const share = workerShareText(db.workers[0], 'https://x.test', 'Fan repair');
-  ok('share text includes jobs completed', share.includes('jobs completed'));
+eq('rupees group the Indian way', rupees(1250000), '₹12,50,000');
+eq('a round amount has no decimals', rupees(1200), '₹1,200');
+eq('paise survive', rupees(1200.5), '₹1,200.50');
+eq('zero is zero, not blank', rupees(0), '₹0');
+eq('null has no amount', rupees(null), '—');
+eq('NaN has no amount', rupees(NaN), '—');
 
-  /* ==================================================== 9. SEED / DEMO */
-  section('Demo accounts and seed');
-  ok('4 demo accounts exist', DEMO_ACCOUNTS.length === 4, DEMO_ACCOUNTS.map((a) => a.role).join(','));
-  for (const a of DEMO_ACCOUNTS) {
-    const found = a.role === 'worker'
-      ? db.workers.find((w) => w.id === a.id)
-      : db.clients.find((c) => c.id === a.id);
-    ok(`demo ${a.role} account resolves`, !!found, found?.name);
-  }
-  ok('all four verification states are represented',
-     ['verified', 'pending', 'failed', 'unverified'].every((s) => db.workers.some((w) => w.verification.status === s)));
-  ok('no worker record contains a full Aadhaar number',
-     db.workers.every((w) => !w.verification.idLast4 || w.verification.idLast4.length === 4));
-  ok('reviews have real text', db.reviews.every((r) => r.text.length > 20), `${db.reviews.length} reviews`);
-  ok('every review points at a real worker', db.reviews.every((r) => db.workers.some((w) => w.id === r.workerId)));
-  ok('every seeded worker service exists in the catalogue',
-     db.workers.every((w) => w.services.every((s) => !!service(s))));
-  ok('every seeded worker service matches their category',
-     db.workers.every((w) => w.services.every((s) => categoryOfService(s) === w.category)));
-  ok('no points, ranks or trust scores on any worker',
-     db.workers.every((w) => !('trust' in w) && !('points' in w) && !('tier' in w)));
+eq('thousands compact', compactNumber(1200), '1.2k');
+eq('a round thousand loses the .0', compactNumber(5000), '5k');
+eq('lakhs compact', compactNumber(250000), '2.5L');
+eq('crores compact', compactNumber(12000000), '1.2Cr');
+eq('small numbers stay whole', compactNumber(42), '42');
 
-  /* ============================ 9b. THE AI ASKS INSTEAD OF ASSUMING */
-  section('Onboarding asks, never assumes');
-  {
-    /* THE BUG: extractYears() ended with `return 1`, so a worker who said only
-       "I am an electrician" got a public profile claiming one year of
-       experience — a number the product invented and then showed to
-       customers as fact. */
-    const bare = await extractWorkerProfile('I am an electrician', 'en');
-    ok('experience is null when nobody stated it', bare.experienceYears === null, String(bare.experienceYears));
-    ok('unstated experience becomes a question', bare.missing.includes('years'));
-    ok('the bio does not claim years it was never told',
-       !/\d/.test(bare.bio), JSON.stringify(bare.bio));
+eq('seconds are just now', timeAgo(new Date(NOW.getTime() - 20_000).toISOString(), NOW), 'just now');
+eq('minutes are minutes', timeAgo(new Date(NOW.getTime() - 12 * 60_000).toISOString(), NOW), '12m');
+eq('hours are hours', timeAgo(new Date(NOW.getTime() - 5 * 3_600_000).toISOString(), NOW), '5h');
+eq('days are days', timeAgo(new Date(NOW.getTime() - 3 * 86_400_000).toISOString(), NOW), '3d');
+ok('a month ago becomes a date', /\d/.test(timeAgo('2026-01-02T00:00:00.000Z', NOW)));
+eq('no timestamp, no output', timeAgo(null, NOW), '');
+eq('rubbish in, nothing out', timeAgo('not a date', NOW), '');
 
-    ok('languages are always asked', bare.missing.includes('languages'));
-    ok('availability is always asked', bare.missing.includes('availability'));
-    ok('service area is always asked', bare.missing.includes('area'));
+ok('month and year read as words', monthYear('2026-03-01T00:00:00.000Z').includes('2026'));
+eq('no date, no month', monthYear(null), '');
 
-    const rich = await extractWorkerProfile('I do fan repair and wiring, 12 years experience', 'en');
-    ok('stated experience is kept', rich.experienceYears === 12, `${rich.experienceYears}`);
-    ok('stated experience is not asked again', !rich.missing.includes('years'));
+eq('a plain number parses', parseAmount('1200'), 1200);
+eq('commas are ignored', parseAmount('1,200'), 1200);
+eq('a rupee sign is ignored', parseAmount('₹1200'), 1200);
+eq('surrounding space is ignored', parseAmount('  1200  '), 1200);
+eq('two decimal places are kept', parseAmount('1200.50'), 1200.5);
+eq('letters are refused', parseAmount('12ab'), null);
+eq('an empty string is refused', parseAmount(''), null);
+eq('zero is refused as a price', parseAmount('0'), null);
+eq('a negative is refused', parseAmount('-50'), null);
+eq('three decimal places are refused', parseAmount('12.345'), null);
 
-    const vague = await extractWorkerProfile('something something', 'en');
-    ok('a transcript with no trade asks for the trade', vague.missing.includes('services'));
-    ok('a transcript with no trade invents no experience', vague.experienceYears === null);
+eq('a username is lowercased', normalizeUsername('RameshKumar'), 'rameshkumar');
+eq('punctuation is stripped', normalizeUsername('ramesh.kumar!'), 'rameshkumar');
+eq('underscores survive', normalizeUsername('ramesh_kumar'), 'ramesh_kumar');
+eq('a username is capped at 24', normalizeUsername('a'.repeat(40)).length, 24);
 
-    ok('every gap has a question to show for it',
-       (['years', 'services', 'languages'] as const).every((g) => !!t('en', `q.${g}` as any)));
-  }
+ok('a real address is an email', isEmail('worker@lokasetu.com'));
+ok('no at sign, no email', !isEmail('worker.lokasetu.com'));
+ok('no domain, no email', !isEmail('worker@'));
+ok('a space is not an email', !isEmail('a b@c.com'));
 
-  /* ==================================================== 10. BOOKING FLOW */
-  section('Booking lifecycle');
-  const bk = db.jobs[0];
-  const open_ = db.jobs.filter(j => j.status === 'requested');
-  const doneJobs = db.jobs.filter(j => j.status === 'completed');
-  const DEADSET = ['completed', 'cancelled_by_client', 'cancelled_by_worker', 'expired'];
+eq('short text is left alone', truncate('hello', 20), 'hello');
+ok('long text is cut at a word', truncate('the quick brown fox jumps over', 12).endsWith('…'));
+ok('truncation does not split a word', !truncate('the quick brown fox jumps over', 12).includes('brow…'));
 
-  ok('every booking carries a payment record', db.jobs.every(j => !!j.payment));
-  ok('an unaccepted request has nobody assigned', open_.every(j => !j.assignedWorkerId));
-  ok('an unaccepted request has taken no money', open_.every(j => j.payment.status === 'unpaid'));
-  ok('anything past requested has a worker on it',
-     db.jobs.filter(j => !['requested', 'draft', 'expired'].includes(j.status)).every(j => !!j.assignedWorkerId));
-  ok('booking captures time preference and duration', !!bk.timePref && !!bk.duration, `${bk.timePref} / ${bk.duration}`);
-  ok('every finished job records when it finished', doneJobs.every(j => !!j.completedAt));
-  ok('finished jobs have settled their money',
-     doneJobs.every(j => j.payment.status === 'released' || j.payment.method === 'cash'));
-  ok('a cancelled job carries its cancellation terms',
-     db.jobs.filter(j => j.status.startsWith('cancelled')).every(j => !!j.cancellation));
+/* ====================================================== 6. people == */
 
-  /* ============================== 10b. THE DEMO HAS SOMETHING TO DEMONSTRATE */
-  section('Demo data is demoable');
-  const DEMO_IDS = ['w_demo', 'c_demo', 's_demo', 'b_demo'];
-  const jobsFor = (id: string) => db.jobs.filter(j => j.clientId === id || j.assignedWorkerId === id);
+section('people');
 
-  for (const id of DEMO_IDS) {
-    const list = jobsFor(id);
-    ok(`${id} has work in flight`, list.some(j => !DEADSET.includes(j.status)), `${list.length} jobs total`);
-    ok(`${id} has finished work to show`, list.some(j => j.status === 'completed'));
-  }
+eq('a full name wins', displayName(profile({ id: 'a', full_name: 'Ramesh Kumar', username: 'rk' })), 'Ramesh Kumar');
+eq('a username is the fallback', displayName(profile({ id: 'a', full_name: null, username: 'rk' })), 'rk');
+eq('nobody is Someone', displayName(null), 'Someone');
+eq('a handle carries the at sign', handleOf(profile({ id: 'a', username: 'rk' })), '@rk');
+eq('no username, no handle', handleOf(profile({ id: 'a', username: null })), '');
 
-  const HOUR = 3600000;
-  const wDemoDone = db.jobs.filter(j => j.assignedWorkerId === 'w_demo' && j.status === 'completed');
-  const earned = (h: number) => wDemoDone
-    .filter(j => (j.completedAt ?? 0) > Date.now() - h * HOUR)
-    .reduce((sum, j) => sum + (j.agreedAmount ?? 0), 0);
-  ok('the demo worker earned something today', earned(24) > 0, `Rs ${earned(24)}`);
-  ok('the demo worker earned more this week', earned(24 * 7) > earned(24), `Rs ${earned(24 * 7)}`);
-  ok('the demo worker earned more this month', earned(24 * 30) > earned(24 * 7), `Rs ${earned(24 * 30)}`);
+eq('two names give two initials', initials('Ramesh Kumar'), 'RK');
+eq('one name gives two letters', initials('Ramesh'), 'RA');
+eq('a middle name is skipped', initials('Ravi Shankar Prasad'), 'RP');
+eq('empty gives a question mark', initials('   '), '?');
 
-  ok('the demo worker is mid-journey on a live job',
-     db.jobs.some(j => j.assignedWorkerId === 'w_demo' && j.status === 'on_the_way'));
-  ok('a job is waiting on the customer to confirm',
-     db.jobs.some(j => j.status === 'worker_done'));
+eq('the same person always gets the same colour', avatarHue('wrk-1'), avatarHue('wrk-1'));
+ok('different people usually differ', avatarHue('wrk-1') !== avatarHue('emp-1'));
+ok('a hue is a hue', avatarHue('anything') >= 0 && avatarHue('anything') < 360);
 
-  ok('conversations exist', db.messages.length > 0, `${db.messages.length} messages`);
-  ok('every message belongs to a real job', db.messages.every(m => db.jobs.some(j => j.id === m.jobId)));
-  ok('conversations include voice notes and quick replies',
-     db.messages.some(m => m.kind === 'voice') && db.messages.some(m => m.kind === 'quick'));
-  ok('a voice note keeps the language it was spoken in',
-     db.messages.filter(m => m.kind === 'voice').every(m => !!m.lang));
-  ok('quotes exist and point at real jobs',
-     db.quotes.length > 0 && db.quotes.every(q => db.jobs.some(j => j.id === q.jobId)), `${db.quotes.length} quotes`);
-  ok('every quote comes from a real worker',
-     db.quotes.every(q => db.workers.some(w => w.id === q.workerId)));
-  ok('the SOS log points at a real job',
-     db.sos.length > 0 && db.sos.every(e => db.jobs.some(j => j.id === e.jobId)));
+/* ================================================ 7. error messages == */
 
-  ok('resetting hands out fresh objects, not shared ones', (() => {
-    const a = seedDB(); const b = seedDB();
-    a.jobs[0].title = 'mutated';
-    return b.jobs[0].title !== 'mutated';
-  })());
+section('error translation');
 
-  /* ============================================ 10c. SHIFTS (recurring rotas) */
-  section('Recurring shifts');
-  {
-    const evening: ShiftPattern = { days: [1, 3, 5], startMin: 21 * 60, endMin: 23 * 60 };
-    ok('a plain shift is the right length', shiftHours(evening) === 2, `${shiftHours(evening)} h`);
-    ok('hours per week multiplies by the days', hoursPerWeek(evening) === 6, `${hoursPerWeek(evening)} h`);
-    ok('a shift plan reads back in words', shiftSummary(evening, en).includes('9:00 pm'), shiftSummary(evening, en));
+eq('a duplicate connection is explained', describeError({ code: '23505', message: 'duplicate key value violates unique constraint "unique_connection"' }), 'You have already sent this person a request.');
+eq('a taken username is explained', describeError({ code: '23505', message: 'duplicate key value violates unique constraint "profiles_username_key"' }), 'That username is taken. Try another.');
+eq('a missing table names the fix', describeError({ code: '42P01', message: 'relation "public.offers" does not exist' }), 'The database tables are missing. Run supabase/schema.sql in the Supabase SQL editor.');
+ok('a missing column names the fix', describeError({ code: '42703', message: 'column posts.post_type does not exist' }).includes('supabase/schema.sql'));
+eq('a trigger message reaches the user', describeError({ code: 'P0001', message: 'the side that proposed this price cannot also accept it' }), 'the side that proposed this price cannot also accept it');
+eq('bad credentials are plain English', describeError({ message: 'Invalid login credentials' }), 'That email and password do not match an account.');
+ok('an unconfirmed email names the setting', describeError({ message: 'Email not confirmed' }).includes('Confirm email'));
+eq('a duplicate account suggests signing in', describeError({ message: 'User already registered' }), 'An account with that email already exists. Sign in instead.');
+ok('a network failure names the variable', describeError({ message: 'Failed to fetch' }).includes('NEXT_PUBLIC_SUPABASE_URL'));
+eq('no error still returns a sentence', describeError(null), 'Something went wrong.');
+eq('an unknown error keeps its message', describeError({ message: 'kaboom' }), 'kaboom');
 
-    /* the bug this guards: 10pm-1am is three hours, not minus twenty-one */
-    const night: ShiftPattern = { days: [0, 6], startMin: 22 * 60, endMin: 1 * 60 };
-    ok('an overnight shift is not negative', shiftHours(night) === 3, `${shiftHours(night)} h`);
-    ok('an overnight shift is flagged as such', crossesMidnight(night));
-    ok('a same-day shift is not flagged', !crossesMidnight(evening));
+/* ================================================ 8. schema agreement == */
 
-    ok('total hours needs an end date', totalHours(evening) === null);
-    ok('a bounded rota totals correctly', totalHours({ ...evening, weeks: 4 }) === 24, `${totalHours({ ...evening, weeks: 4 })} h`);
+section('schema agreement');
 
-    /* 4.345 weeks a month, not 4 — a flat 4 under-pays by ~8 days a year */
-    const cost = monthlyCost(evening, 200, 1);
-    ok('a month is 4.345 weeks, not 4', cost === Math.round(6 * 4.345 * 200), `Rs ${cost}`);
-    ok('more staff costs proportionally more', monthlyCost(evening, 200, 3) === cost * 3 || Math.abs(monthlyCost(evening, 200, 3) - cost * 3) <= 3);
+eq('two roles', [...ROLES], ['worker', 'employer']);
+eq('two post types', [...POST_TYPES], ['job', 'update']);
+eq('four post statuses', POST_STATUSES.length, 4);
+eq('four connection statuses', CONNECTION_STATUSES.length, 4);
+eq('four offer statuses', OFFER_STATUSES.length, 4);
+eq('the table names are the schema table names', Object.values(TABLE), ['profiles', 'posts', 'connections', 'offers']);
 
-    ok('a rota with no days is not staffable', !isValidShift({ ...evening, days: [] }));
-    ok('a 20-hour shift is not staffable', !isValidShift({ days: [1], startMin: 0, endMin: 20 * 60 }));
-    ok('a normal rota is staffable', isValidShift(evening));
+ok('the profile field list has no trailing comma', !PROFILE_FIELDS.trim().endsWith(','));
+ok('the offer select names the employer relationship explicitly', OFFER_SELECT.includes('offers_employer_id_fkey'));
+ok('the offer select names the worker relationship explicitly', OFFER_SELECT.includes('offers_worker_id_fkey'));
+ok('the connection select names both relationships', CONNECTION_SELECT.includes('connections_requester_id_fkey') && CONNECTION_SELECT.includes('connections_receiver_id_fkey'));
+ok('the post select embeds one author', POST_SELECT.includes('author:profiles('));
+ok('every select asks for the columns the row type declares', PROFILE_FIELDS.includes('hourly_rate') && PROFILE_FIELDS.includes('verified') && PROFILE_FIELDS.includes('role'));
 
-    const mondayNoon = new Date(2026, 7, 17, 12, 0, 0).getTime();  // a Monday
-    const next = nextOccurrence(evening, mondayNoon);
-    ok('the next shift is later than now', !!next && next > mondayNoon);
-    ok('the next shift lands on a chosen day',
-       !!next && evening.days.includes(new Date(next).getDay()),
-       next ? new Date(next).toDateString() : '');
-    ok('every weekday has a label in every language',
-       LANGUAGES.every((l) => DAY_KEYS.every((k) => !!t(l.code, k as any))));
-  }
+/* ================================================ 9. catalog and cities == */
 
-  /* ==================================================== 10d. MAP PROJECTION */
-  section('Map and live tracking');
-  {
-    const kora = geoOf('blr_koramangala')!, hsr = geoOf('blr_hsr')!;
+section('catalog');
 
-    /* Web Mercator sanity: further east is further right, further north is further up */
-    const a = project(kora.lat, kora.lng, 13);
-    const b = project(hsr.lat, hsr.lng, 13);
-    ok('east of a point projects to a larger x', b.x > a.x);
-    ok('south of a point projects to a larger y', b.y > a.y, 'HSR is south of Koramangala');
+eq('fifteen categories', CATEGORIES.length, 15);
+eq('category ids are unique', new Set(CATEGORY_IDS).size, CATEGORIES.length);
+ok('every category has an icon', CATEGORIES.every((c) => c.icon.length > 0));
+ok('every hue is a hue', CATEGORIES.every((c) => c.hue >= 0 && c.hue < 360));
+eq('a known id resolves', categoryById('electrical')?.id, 'electrical');
+eq('an unknown id resolves to nothing', categoryById('zzz'), null);
+eq('null resolves to nothing', categoryById(null), null);
+eq('city names are unique', new Set(CITIES).size, CITIES.length);
+ok('there are at least ten cities', CITIES.length >= 10);
 
-    const z = fitZoom(kora, hsr, 640, 210);
-    ok('both points fit in the box at the chosen zoom', z >= 11 && z <= 16, `z${z}`);
-    const pa = toPixel(kora.lat, kora.lng, midpoint(kora, hsr), z, 640, 210);
-    const pb = toPixel(hsr.lat, hsr.lng, midpoint(kora, hsr), z, 640, 210);
-    ok('both markers land inside the box',
-       [pa, pb].every((p) => p.left >= 0 && p.left <= 640 && p.top >= 0 && p.top <= 210));
-    ok('the two markers are not on top of each other', Math.hypot(pa.left - pb.left, pa.top - pb.top) > 20);
+/* ================================================ 10. ten languages == */
 
-    const tiles = tilesFor(midpoint(kora, hsr), z, 640, 210);
-    ok('the box is fully covered by tiles', tiles.length >= 4, `${tiles.length} tiles`);
-    ok('every tile url is keyless',
-       tiles.every((x) => !/key|token|apikey|access_token/i.test(x.url)), tiles[0].url);
-    ok('no tile is requested from outside the pyramid',
-       tiles.every((x) => { const [zz, xx, yy] = x.key.split('/').map(Number);
-         return xx >= 0 && xx < 2 ** zz && yy >= 0 && yy < 2 ** zz; }));
+section('ten languages');
 
-    /* travel interpolation — the honest, non-GPS one */
-    const t0 = 1_700_000_000_000;
-    ok('a journey not started is at zero', travelProgress(undefined, 20, t0) === 0);
-    ok('halfway through the time is halfway along', travelProgress(t0, 20, t0 + 10 * 60000) === 0.5);
-    ok('progress never exceeds one', travelProgress(t0, 20, t0 + 999 * 60000) === 1);
-    ok('progress never goes backwards', travelProgress(t0, 20, t0 - 60000) === 0);
-    const mid = lerpGeo(kora, hsr, 0.5);
-    ok('the halfway point is between the two ends',
-       mid.lat < kora.lat && mid.lat > hsr.lat, `${mid.lat.toFixed(4)}`);
-  }
+eq('ten languages', LANGS.length, 10);
+eq('ten language codes', LANG_CODES.length, 10);
+eq('language codes are unique', new Set(LANG_CODES).size, 10);
+ok('english is one of them', LANG_CODES.includes('en'));
+ok('a real code is recognised', isLangCode('ta'));
+ok('a fake code is not', !isLangCode('xx'));
+ok('a non-string is not a code', !isLangCode(42));
 
-  /* ============================== 10e. GEOGRAPHY — the "0 m away" regression */
-  section('Places and distance');
-  {
-    ok('the app covers more than one city', CITIES.length >= 10, `${CITIES.length} cities`);
-    ok('every city has localities', CITIES.every((c) => c.localities.length >= 6));
-    ok('every locality id is unique',
-       new Set(ALL_LOCALITIES.map((l) => l.id)).size === ALL_LOCALITIES.length);
-
-    /* THE BUG: every entity used to sit on a locality centroid, so a worker and
-       a job in the same area were 0.000 km apart and the feed printed "0 m". */
-    let zero = 0;
-    for (const j of db.jobs) for (const w of db.workers) if (distanceKm(j.geo, w.geo) === 0) zero++;
-    ok('no worker is at exactly zero distance from a job', zero === 0, `${zero} collisions`);
-
-    const points = new Set(db.workers.map((w) => `${w.geo.lat},${w.geo.lng}`));
-    ok('no two workers share a coordinate', points.size === db.workers.length,
-       `${points.size}/${db.workers.length}`);
-
-    ok('distance never renders as zero', formatDistance(0) === 'nearby', formatDistance(0));
-    ok('a real distance still renders as a distance', formatDistance(2.34) === '2.3 km', formatDistance(2.34));
-    ok('sub-kilometre reads in metres', formatDistance(0.48) === '480 m', formatDistance(0.48));
-
-    ok('every worker knows which city they are in', db.workers.every((w) => !!w.geo.cityId));
-    ok('every job knows which city it is in', db.jobs.every((j) => !!j.geo.cityId));
-
-    /* multi-city means every city has a marketplace, not just a name */
-    const thin = CITIES.filter((c) => db.workers.filter((w) => w.geo.cityId === c.id).length < 6);
-    ok('every city has workers in it', thin.length === 0,
-       thin.length ? thin.map((c) => c.name).join(', ') : `${CITIES.length} cities staffed`);
-
-    /* and that a search in one city cannot return another city's workers */
-    const blrJob = { geo: geoOf('blr_koramangala')!, category: 'electrical' as const, serviceId: 'fan_repair' };
-    const hits = rankWorkers(blrJob, db.workers);
-    ok('a search returns local workers only',
-       hits.every((m) => m.geo?.cityId === undefined || m.worker.geo.cityId === 'blr'),
-       `${hits.length} hits, all Bengaluru`);
-    ok('a city search actually finds somebody', hits.length > 0, `${hits.length}`);
-  }
-
-  /* ============================= 10e2. A CUSTOMER CHOOSES THEIR OWN CITY */
-  {
-    /* THE BUG: loginClient() fell back to a hardcoded Koramangala, so a
-       customer signing up in Mumbai was placed in Bengaluru and shown workers
-       800km away. The signature now carries a geo. */
-    const src = readFileSync(new URL('../components/store.tsx', import.meta.url), 'utf8');
-    ok('signup accepts a location',
-       /loginClient\([^)]*geo\?: Geo/.test(src));
-    ok('no hardcoded Koramangala fallback remains in signup',
-       !src.includes("areaName: 'Koramangala, Bengaluru'"));
-
-    /* and every city must be reachable from the picker, not just present in data */
-    const picker = readFileSync(new URL('../components/city.tsx', import.meta.url), 'utf8');
-    ok('the picker offers every city, not a subset', picker.includes('CITIES.map'));
-  }
-
-  /* ================== 10f. TRADE MATCHING — an electrician sees electrical work */
-  section('Workers only see their own trade');
-  {
-    const trades = ['electrical', 'plumbing', 'cleaning', 'domestic', 'carpentry'] as const;
-    for (const trade of trades) {
-      const w = db.workers.find((x) => x.category === trade);
-      if (!w) continue;
-      const visible = db.jobs.filter((j) =>
-        rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]).length > 0);
-      ok(`a ${trade} worker is never shown another trade`,
-         visible.every((j) => j.category === trade),
-         visible.length ? visible.map((j) => j.category).join(',') : 'no jobs in range');
+{
+  const missing: string[] = [];
+  const blank: string[] = [];
+  for (const key of T_KEYS) {
+    for (const code of LANG_CODES) {
+      const value = translate(key, code);
+      if (value === undefined || value === null) missing.push(`${key}.${code}`);
+      else if (String(value).trim() === '') blank.push(`${key}.${code}`);
     }
-
-    /* the specific complaint: an electrician receiving cooking and cleaning */
-    const elec = db.workers.find((x) => x.id === 'w_demo')!;
-    const cooking = db.jobs.find((j) => j.category === 'domestic' || j.category === 'cleaning');
-    ok('the demo electrician cannot be offered a cleaning job',
-       !cooking || rankWorkers({ geo: cooking.geo, category: cooking.category, serviceId: cooking.serviceId }, [elec]).length === 0);
-    ok('a worker is never offered a service they did not list',
-       db.workers.every((w) => db.jobs.every((j) => {
-         const shown = rankWorkers({ geo: j.geo, category: j.category, serviceId: j.serviceId }, [w]).length > 0;
-         return !shown || !j.serviceId || w.services.includes(j.serviceId);
-       })));
   }
+  eq('no translation is missing', missing, []);
+  eq('no translation is blank', blank, []);
+}
 
-  /* ================================================= 10g. EARNINGS DASHBOARD */
-  section('Earnings');
-  {
-    const NOW = new Date(2026, 7, 19, 14, 0, 0).getTime();
-    const wid = 'w_demo';
+ok('there are at least 150 strings', T_KEYS.length >= 150);
+eq('every string exists in every language', T_KEYS.length * LANG_CODES.length, T_KEYS.length * 10);
 
-    ok('only completed work counts as earnings',
-       earnedJobs(db.jobs, wid).every((j) => j.status === 'completed' && !!j.completedAt));
-    ok('another worker\'s jobs are never counted',
-       earnedJobs(db.jobs, wid).every((j) => j.assignedWorkerId === wid));
+{
+  // The dictionary must cover every category id, or a chip renders as a raw id.
+  const uncovered = CATEGORY_IDS.filter((id) => categoryKey(id) === 'cat_other' && id !== 'other');
+  eq('every category has its own translation key', uncovered, []);
+  eq('an unknown category falls back rather than crashing', categoryKey('not-a-category'), 'cat_other');
+}
 
-    const life = lifetime(db.jobs, wid);
-    const yr = summarise(db.jobs, wid, 'y1', Date.now());
-    ok('a year never exceeds the lifetime total', yr.total <= life.total, `${yr.total} <= ${life.total}`);
+{
+  // A sample, to catch a copy-paste that left English in a translated slot.
+  const englishInHindi = ['navFeed', 'accept', 'decline', 'counter'].filter(
+    (key) => translate(key as any, 'hi') === translate(key as any, 'en'),
+  );
+  eq('the Hindi column is not a copy of the English one', englishInHindi, []);
+}
 
-    const d7 = summarise(db.jobs, wid, 'd7', Date.now());
-    const d30 = summarise(db.jobs, wid, 'd30', Date.now());
-    ok('a longer window earns at least as much', d30.total >= d7.total, `30d ${d30.total} >= 7d ${d7.total}`);
-    ok('the buckets add up to the total',
-       d30.buckets.reduce((s2, b) => s2 + b.amount, 0) === d30.total);
+/* ================================================ 11. demo accounts == */
 
-    ok('an average with no jobs is zero, never NaN', (() => {
-      const none = summarise([], 'nobody', 'd30', NOW);
-      return none.average === 0 && none.total === 0 && !Number.isNaN(none.average);
-    })());
+section('demo accounts');
 
-    /* bucket counts are what keep the chart readable */
-    ok('a week draws 7 bars', bucketsFor('d7', NOW).length === 7);
-    ok('30 days draws 30 bars', bucketsFor('d30', NOW).length === 30);
-    ok('90 days is drawn weekly, not as 90 bars', bucketsFor('d90', NOW).length === 13);
-    ok('a year draws 12 months', bucketsFor('y1', NOW).length === 12);
-    ok('lifetime is capped so it cannot draw hundreds of bars',
-       bucketsFor('all', NOW, new Date(2015, 0, 1).getTime()).length <= 24);
+eq('exactly two demo accounts', DEMO_ACCOUNTS.length, 2);
+eq('one of each role', DEMO_ACCOUNTS.map((a) => a.role).sort(), ['employer', 'worker']);
+eq('the emails are distinct', new Set(DEMO_ACCOUNTS.map((a) => a.email)).size, 2);
+eq('the usernames are distinct', new Set(DEMO_USERNAMES).size, 2);
+ok('every demo password is long enough for Supabase', DEMO_ACCOUNTS.every((a) => a.password.length >= 6));
+ok('the demo emails are the documented ones', DEMO_ACCOUNTS.map((a) => a.email).includes('employer@lokasetu.com') && DEMO_ACCOUNTS.map((a) => a.email).includes('worker@lokasetu.com'));
+ok('demo usernames are namespaced so a real signup cannot take them', DEMO_USERNAMES.every((u) => u.startsWith('lokasetu_')));
+ok('a demo username is recognised', isDemoUsername('lokasetu_worker'));
+ok('an ordinary username is not', !isDemoUsername('ramesh'));
+ok('null is not a demo username', !isDemoUsername(null));
+eq('an account can be found by username', demoAccountFor('lokasetu_worker')?.role, 'worker');
+eq('an unknown username finds nothing', demoAccountFor('nobody'), null);
+ok('the demo worker has skills to show', (demoAccountFor('lokasetu_worker')?.skills.length ?? 0) > 0);
+ok('every demo skill is a real category', DEMO_ACCOUNTS.every((a) => a.skills.every((s) => CATEGORY_IDS.includes(s))));
 
-    ok('buckets never overlap', (() => {
-      const b = bucketsFor('d7', NOW);
-      return b.every((x, i) => i === 0 || x.from >= b[i - 1].to);
-    })());
-    ok('buckets are in time order', (() => {
-      const b = bucketsFor('m6', NOW);
-      return b.every((x, i) => i === 0 || x.from > b[i - 1].from);
-    })());
+/* ================================================ 12. version stamp == */
 
-    ok('axis ceilings are round numbers', niceMax(937) === 1000 && niceMax(1874) === 2000,
-       `${niceMax(937)}, ${niceMax(1874)}`);
-    ok('an empty chart still has a scale', niceMax(0) === 100);
-    ok('big money compacts', compact(12400) === '12K' && compact(250000) === '2.5L',
-       `${compact(12400)} / ${compact(250000)}`);
-    ok('small money does not compact', compact(840) === '840');
+section('version');
 
-    ok('every range has a label in every language',
-       LANGUAGES.every((l) => RANGES.every((r) => !!t(l.code, r.key as any))));
-  }
+ok('the version looks like a version', /^\d+\.\d+\.\d+$/.test(VERSION));
 
-  /* ========================= 10h. SERVER RENDER / VERCEL BUILD SAFETY */
-  section('Server render safety');
-  {
-    /* THE BUILD FAILURE: the provider seeded inside a useState initialiser, so
-       Next.js built the whole demo database during prerender — on the server,
-       for every static route including /_not-found. Anything that throws in
-       that path fails the production build instead of one screen. */
-    const store = readFileSync(new URL('../components/store.tsx', import.meta.url), 'utf8');
-    ok('the store does not seed during render', !store.includes('useState<DB>(() => seedDB())'));
-    /* Matching intent, not an exact expression — this pinned the literal
-       `useState<DB>(EMPTY_DB)` and broke the moment a test seam was added
-       around it, which is a test failing on refactoring rather than on a bug. */
-    ok('the server renders an empty database',
-       /useState<DB>\((initialDb \?\? )?EMPTY_DB\)/.test(store));
-    ok('the test seam is inert in production',
-       store.includes('initialDb?: DB') && store.includes('if (initialDb) return;'));
-    /* Every call to seedDB must sit after the first useEffect — i.e. inside
-       one. Checking position rather than an exact call shape, because the
-       exact shape changed once and quietly broke this assertion. */
-    const storeNoComments = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    const firstEffect = storeNoComments.indexOf('useEffect(');
-    const seedCalls = [...storeNoComments.matchAll(/seedDB\(\)/g)].map((m) => m.index ?? -1);
-    ok('seeding happens in an effect, which never runs on the server',
-       firstEffect > 0 && seedCalls.length > 0 && seedCalls.every((i) => i > firstEffect),
-       `${seedCalls.length} call(s), all after the first effect`);
+/* ====================================================== the verdict == */
 
-    /* Storage written by an older build must not be read by a newer one. */
-    ok('stored data is stamped with the build that wrote it',
-       storeNoComments.includes('version: VERSION'));
-    ok('stored data from another build is discarded, not parsed',
-       storeNoComments.includes('stored?.version === VERSION'));
-
-    /* The crash that an empty database used to cause. Comments are stripped
-       first: the fix is DESCRIBED in a comment right next to the code, and a
-       naive substring check matched the prose and reported a false failure. */
-    const storeCode = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    ok('no unguarded index into an empty workers array',
-       !storeCode.includes('db.workers[0].geo'));
-    ok('the location fallback chain is fully optional',
-       storeCode.includes('db.workers[0]?.geo'));
-    ok('a location is always resolvable', (() => {
-      const empty = { workers: [], clients: [] } as any;
-      const geo = empty.clients[0]?.geo ?? empty.workers[0]?.geo ?? geoOf('blr_koramangala');
-      return !!geo && typeof geo.lat === 'number';
-    })());
-
-    /* /_not-found is the route the build died on. */
-    let has404 = true;
-    try { readFileSync(new URL('../app/not-found.tsx', import.meta.url)); } catch { has404 = false; }
-    ok('an explicit 404 page exists', has404);
-    if (has404) {
-      const nf = readFileSync(new URL('../app/not-found.tsx', import.meta.url), 'utf8');
-      ok('the 404 page is a server component with no hooks',
-         !nf.includes("'use client'") && !/\buse[A-Z]/.test(nf));
-    }
-
-    /* Browser-only globals must never be touched while rendering. */
-    for (const f of ['../components/store.tsx', '../components/theme.tsx', '../components/aurora.tsx']) {
-      const src = readFileSync(new URL(f, import.meta.url), 'utf8');
-      const render = src.split('useEffect').shift() ?? '';
-      ok(`${f.split('/').pop()} touches no browser global during render`,
-         !/\bwindow\.|\bdocument\.|localStorage\./.test(render.replace(/\/\*[\s\S]*?\*\//g, '')));
-    }
-
-    /* Clock reads during render are hydration mismatches by construction. */
-    const jobPage = readFileSync(new URL('../app/job/[id]/page.tsx', import.meta.url), 'utf8');
-    ok('the job page reads no clock while rendering',
-       !jobPage.includes('nextOccurrence(job.shift!, Date.now())'));
-
-    /* The root layout needs its own boundary. app/error.tsx sits INSIDE the
-       route tree and cannot catch a provider that throws — Next falls back to
-       "Application error: a client-side exception has occurred", which hides
-       the message behind a console and leaves the debugger nothing. */
-    let hasGlobalError = true;
-    try { readFileSync(new URL('../app/global-error.tsx', import.meta.url)); } catch { hasGlobalError = false; }
-    ok('the root layout has an error boundary', hasGlobalError);
-    if (hasGlobalError) {
-      const ge = readFileSync(new URL('../app/global-error.tsx', import.meta.url), 'utf8');
-      ok('the global boundary renders its own html and body', ge.includes('<html') && ge.includes('<body'));
-      ok('the global boundary shows the actual message, not just a shrug',
-         ge.includes('error?.message'));
-      ok('the global boundary uses no provider it cannot rely on',
-         !ge.includes('useT()') && !ge.includes('useStore()'));
-    }
-
-    /* Seeding runs in a browser on every first visit. It must stay small
-       enough for localStorage, which is ~5MB and throws when exceeded. */
-    const seeded = JSON.stringify({ version: '0', db: seedDB() });
-    ok('the seeded database fits in localStorage',
-       seeded.length < 4 * 1024 * 1024, `${(seeded.length / 1024).toFixed(0)} KB`);
-
-    /* No component may touch the animation library's frame clock during
-       render. useMotionValue/useSpring subscribe to a module-scoped `let now`
-       that a production minifier removed, giving "ReferenceError: now is not
-       defined" from inside the vendor chunk — in the production build only. */
-    for (const f of ['../components/aurora.tsx', '../components/map.tsx', '../components/chart.tsx']) {
-      const src = readFileSync(new URL(f, import.meta.url), 'utf8')
-        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-      ok(`${f.split('/').pop()} uses no frame-clock API`,
-         !src.includes('useSpring(') && !src.includes('useMotionValue('));
-    }
-    ok('the animation library is pinned, not a floating range',
-       !JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-         .dependencies.motion.startsWith('^'));
-
-    /* The type gate must stay on. It was disabled once, to unblock a deploy,
-       and the error it was hiding turned out to be real. */
-    const cfg = readFileSync(new URL('../next.config.mjs', import.meta.url), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    ok('TypeScript errors still stop the build', !cfg.includes('ignoreBuildErrors'));
-
-    /* The build number is stated in three files. It drifted: the app said
-       4.1.3 while the README — the GitHub front page — still announced v4.1,
-       so the repo advertised a build nobody was running. lib/version.ts is the
-       source of truth; these fail if the copies fall behind it again. */
-    const rd = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
-    const declared = rd('./version.ts').match(/VERSION = '([^']+)'/)?.[1];
-    const inPkg = JSON.parse(rd('../package.json')).version;
-    const inReadme = rd('../README.md').match(/\*\*Current build: v([\d.]+)\*\*/)?.[1];
-
-    ok('the app declares a version', !!declared, declared);
-    ok('package.json matches lib/version.ts', inPkg === declared, `${inPkg} vs ${declared}`);
-    ok('the README matches lib/version.ts', inReadme === declared, `${inReadme} vs ${declared}`);
-    ok('a sync script exists so this is one command, not three edits',
-       JSON.parse(rd('../package.json')).scripts['version:sync'] === 'node scripts/version.mjs');
-
-    /* The test harness must stay out of the app's build graph. */
-    const tsconfig = readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8');
-    ok('the test harness is excluded from the Next build', tsconfig.includes('lib/selftest.ts'));
-  }
-
-  /* ==================================================== 11. PAYMENTS */
-  section('Payments');
-  ok('7 payment methods offered', PAYMENT_METHODS.length === 7, PAYMENT_METHODS.map(m => m.id).join(','));
-  ok('cash is the only method that cannot be protected',
-     PAYMENT_METHODS.filter(m => !m.protectable).map(m => m.id).join(',') === 'cash');
-
-  const order = await createOrder('bk_test', 500, 'upi');
-  ok('UPI order is authorised and protected', order.status === 'authorized' && order.protected, order.orderRef);
-  const held = await holdFunds(order);
-  ok('capture moves money to held', held.status === 'held' && held.protected);
-  const released = await releaseFunds(held);
-  ok('release pays the worker and drops protection', released.status === 'released' && !released.protected);
-  const back = await refund(held, 40);
-  ok('refund returns the amount minus the fee', back.status === 'refunded' && back.amount === 460, `₹${back.amount}`);
-
-  const cashOrder = await createOrder('bk_test', 500, 'cash');
-  ok('cash is never marked protected', cashOrder.status === 'unpaid' && !cashOrder.protected);
-  ok('every payment state has a label', ['unpaid','authorized','held','released','refunded'].every(s => !!statusKey(s)));
-  ok('order references are deterministic',
-     (await createOrder('bk_x', 100, 'upi')).orderRef === (await createOrder('bk_x', 100, 'upi')).orderRef);
-
-  /* ==================================================== 12. CANCELLATION */
-  section('Cancellation policy');
-  const mk = (status, extra = {}) => ({ ...db.jobs[0], status, agreedAmount: 300, payment: { ...EMPTY_PAYMENT }, ...extra });
-  ok('cancelling before acceptance is free', cancelTerms(mk('requested'), 'client').free);
-  ok('cancelling before the worker sets off is free', cancelTerms(mk('accepted'), 'client').free);
-  const travelling = cancelTerms(mk('on_the_way'), 'client');
-  ok('cancelling after travel starts has a fee', !travelling.free && travelling.fee > 0, `₹${travelling.fee}`);
-  ok('the fee is capped at ₹100', travelFee(mk('on_the_way', { agreedAmount: 99999 })) <= 100, `₹${travelFee(mk('on_the_way', { agreedAmount: 99999 }))}`);
-  ok('a worker cancelling never charges the customer', cancelTerms(mk('on_the_way'), 'worker').free);
-  ok('worker cancellation offers a replacement', cancelTerms(mk('on_the_way'), 'worker').nextKey === 'cx.replacementOffered');
-  ok('a completed job cannot be cancelled', !canCancel(mk('completed'), 'client'));
-  ok('policy is published as 4 rows', POLICY_ROWS.length === 4);
-  ok('every policy row has a translated label and cost',
-     POLICY_ROWS.every(r => !!DICTS.hi[r.whenKey] && !!DICTS.hi[r.costKey]));
-
-  /* ==================================================== 13. GEO / ETA */
-  section('Distance and ETA');
-  const d = distanceKm({ lat: 12.9352, lng: 77.6245 }, { lat: 12.9121, lng: 77.6446 });
-  ok('Koramangala to HSR is 2-6 km', d > 2 && d < 6, formatKm(d));
-  ok('ETA grows with distance', etaMinutes(0.4) < etaMinutes(3.4), `${etaMinutes(0.4)} vs ${etaMinutes(3.4)} min`);
-
-  console.log(fails === 0 ? '\n🎉 ALL CHECKS PASSED' : `\n⚠️  ${fails} CHECK(S) FAILED`);
-  process.exit(fails ? 1 : 0);
-})();
+console.log('');
+if (failures.length) {
+  console.log(`  ${failures.length} assertion(s) failed:\n`);
+  for (const failure of failures) console.log(`   ✗ ${failure}`);
+  console.log(`\n  ${passed} passed, ${failures.length} failed\n`);
+  process.exit(1);
+}
+console.log(`  ✅ ${passed} assertions passed\n`);

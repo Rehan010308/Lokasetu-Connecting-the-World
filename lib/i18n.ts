@@ -1,288 +1,265 @@
-import type { LangCode } from './types';
-
-/* ===========================================================================
-   THE LANGUAGE SYSTEM
-
-   V1 shipped partial dictionaries with an English fallback, which is exactly
-   how you end up with a Hindi screen containing English buttons.
-
-   V2 removes the fallback. Every dictionary is typed `Dict`, which is a
-   COMPLETE Record of every key. Miss one translation and `npm run build`
-   fails with the missing key named. A mixed-language screen is now a
-   compile error, not a bug report.
-   =========================================================================== */
-
-export const LANGUAGES: { code: LangCode; label: string; native: string; speech: string }[] = [
-  { code: 'en', label: 'English',   native: 'English',  speech: 'en-IN' },
-  { code: 'hi', label: 'Hindi',     native: 'हिन्दी',    speech: 'hi-IN' },
-  { code: 'ta', label: 'Tamil',     native: 'தமிழ்',     speech: 'ta-IN' },
-  { code: 'te', label: 'Telugu',    native: 'తెలుగు',    speech: 'te-IN' },
-  { code: 'kn', label: 'Kannada',   native: 'ಕನ್ನಡ',     speech: 'kn-IN' },
-  { code: 'ml', label: 'Malayalam', native: 'മലയാളം',   speech: 'ml-IN' },
-  { code: 'mr', label: 'Marathi',   native: 'मराठी',     speech: 'mr-IN' },
-  { code: 'bn', label: 'Bengali',   native: 'বাংলা',     speech: 'bn-IN' },
-  { code: 'gu', label: 'Gujarati',  native: 'ગુજરાતી',   speech: 'gu-IN' },
-  { code: 'pa', label: 'Punjabi',   native: 'ਪੰਜਾਬੀ',    speech: 'pa-IN' },
-];
-
-const en = {
-  /* app */
-  'app.name': 'LokaSetu',
-  'app.tagline': 'Trusted local workers, near you',
-
-  /* common */
-  'c.continue': 'Continue', 'c.back': 'Back', 'c.confirm': 'Confirm', 'c.cancel': 'Cancel',
-  'c.yes': 'Yes', 'c.no': 'No', 'c.save': 'Save', 'c.send': 'Send', 'c.close': 'Close',
-  'c.edit': 'Edit', 'c.done': 'Done', 'c.skip': 'Skip', 'c.search': 'Search', 'c.retry': 'Try again',
-  'c.share': 'Share', 'c.call': 'Call', 'c.logout': 'Log out', 'c.or': 'or', 'c.all': 'All',
-  'c.min': 'min', 'c.km': 'km', 'c.years': 'years', 'c.optional': 'optional', 'c.loading': 'Loading',
-
-  /* navigation */
-  'n.home': 'Home', 'n.search': 'Search', 'n.jobs': 'My jobs', 'n.messages': 'Messages',
-  'n.profile': 'Profile', 'n.help': 'Help',
-
-  /* roles + login */
-  'a.choose': 'Who are you?',
-  'a.worker': 'I want work',
-  'a.workerD': 'Electrician, plumber, maid, driver, guard and more',
-  'a.customer': 'I need a worker',
-  'a.customerD': 'For my home or family',
-  'a.society': 'Society / RWA',
-  'a.societyD': 'Hire staff for an apartment or community',
-  'a.business': 'Business owner',
-  'a.businessD': 'Shop, store or small business',
-  'a.demoTitle': 'Just looking around?',
-  'a.demoDesc': 'Open a ready-made account. No sign-up needed.',
-  'a.demoWorker': 'Demo worker', 'a.demoCustomer': 'Demo resident',
-  'a.demoSociety': 'Demo society', 'a.demoBusiness': 'Demo business',
-  'a.phoneTitle': 'Your mobile number',
-  'a.phoneSub': 'We send a 6 digit code to check it is you',
-  'a.phonePh': '10 digit mobile number',
-  'a.sendCode': 'Send code',
-  'a.otpTitle': 'Enter the code', 'a.otpSub': 'Code sent to',
-  'a.otpDemo': 'Demo mode: the code is always 123456',
-  'a.otpWrong': 'That code is not right. Try 123456.',
-  'a.verify': 'Verify',
-  'a.nameLabel': 'Your name', 'a.namePh': 'For example: Ramesh Kumar',
-  'a.orgLabel': 'Name of your society or shop', 'a.orgPh': 'For example: Green Valley Apartments',
-
-  /* home */
-  'h.greeting': 'What do you need done?',
-  'h.searchPh': 'Electrician, leaking tap, maid…',
-  'h.speak': 'Speak instead',
-  'h.popular': 'Common needs',
-  'h.browse': 'All services',
-  'h.myJobs': 'Your jobs',
-  'h.iNeedWork': 'I am looking for work',
-  'h.iNeedWorkD': 'Speak once. We build your profile free.',
-  'h.viewAll': 'See all',
-  'h.noJobs': 'No jobs yet',
-
-  /* search */
-  's.title': 'Search',
-  's.resultsIn': 'workers in',
-  's.none': 'No workers found here yet. Try another service or a wider area.',
-  's.fAll': 'All', 's.fNear': 'Nearest', 's.fAvailable': 'Available now', 's.fVerified': 'Verified only',
-  's.pickService': 'What exactly do you need?',
-  's.back': 'All categories',
-
-  /* worker card + profile */
-  'w.verified': 'Aadhaar verified',
-  'w.pending': 'Verification pending',
-  'w.failed': 'Verification failed',
-  'w.unverified': 'Not verified',
-  'w.jobsDone': 'jobs completed',
-  'w.reviews': 'Reviews',
-  'w.experience': 'Experience',
-  'w.speaks': 'Speaks',
-  'w.away': 'away',
-  'w.respondsIn': 'Usually replies in',
-  'w.view': 'View profile',
-  'w.hire': 'Hire',
-  'w.callNow': 'Call',
-  'w.whatsapp': 'WhatsApp',
-  'w.noReviews': 'No reviews yet',
-  'w.about': 'About',
-  'w.services': 'What they do',
-  'w.availability': 'Available',
-  'w.share': 'Share this worker',
-
-  /* worker onboarding */
-  'o.lang': 'Which language do you want to use?',
-  'o.langSub': 'The whole app will be in this language',
-  'o.work': 'Tell me what work you do',
-  'o.workSub': 'Press the button and speak normally. No forms.',
-  'o.tapSpeak': 'Press and speak',
-  'o.listening': 'Listening… speak now',
-  'o.stop': 'Stop',
-  'o.type': 'Type instead',
-  'o.example': 'For example: I do electrical wiring and fan fitting, six years experience',
-  'o.create': 'Make my profile',
-  'o.understood': 'This is what I understood',
-  'o.correct': 'Yes, this is right',
-  'o.redo': 'No, let me say it again',
-  'o.changeWork': 'Change the type of work',
-  'o.where': 'Where do you work?',
-  'o.radius': 'How far can you travel?',
-  'o.when': 'When can you work?',
-  'o.done': 'You are ready',
-  'o.doneSub': 'Your profile is live. Nearby jobs will come to you.',
-  'o.goJobs': 'See jobs near me',
-  'o.noMic': 'Voice does not work in this browser. Please type instead.',
-
-  /* aadhaar verification */
-  'v.title': 'Verify your Aadhaar',
-  'v.sub': 'Verified workers get up to 3 times more jobs. It takes one minute.',
-  'v.ph': '12 digit Aadhaar number',
-  'v.consent': 'I agree to LokaSetu checking my Aadhaar for identity verification only.',
-  'v.now': 'Verify now',
-  'v.later': 'Do this later',
-  'v.checking': 'Checking with UIDAI…',
-  'v.ok': 'Verified',
-  'v.okSub': 'Your identity is confirmed. Customers can see your badge.',
-  'v.fail': 'We could not verify this number',
-  'v.failSub': 'Check the number and try again, or skip for now.',
-  'v.privacy': 'We never store your Aadhaar number — only the last 4 digits.',
-  'v.simNote': 'Demo build: verification is simulated, no real Aadhaar is checked.',
-
-  /* availability + urgency */
-  'av.today': 'Only today', 'av.weekdays': 'Monday to Friday', 'av.anytime': 'Any day',
-  'u.emergency': 'Emergency', 'u.today': 'Today', 'u.this_week': 'This week', 'u.flexible': 'Any day',
-
-  /* posting a job */
-  'p.title': 'What do you need?',
-  'p.sub': 'Speak or type in your own language',
-  'p.ph': 'For example: fan is not working, need someone today',
-  'p.find': 'Find workers',
-  'p.askService': 'Which of these is it?',
-  'p.askWhen': 'When should the worker come?',
-  'p.askBudget': 'What budget do you have in mind?',
-  'p.askWhere': 'Where is the work? Flat and building name.',
-  'p.wherePh': 'For example: Flat 402, Green Valley',
-  'p.budgetSkip': 'I am not sure — suggest a price',
-  'p.review': 'Check before posting',
-  'p.publish': 'Post this job',
-  'p.estimate': 'Fair price for this work',
-  'p.posted': 'Job posted',
-  'p.postedSub': 'Nearby workers have been told. You will get replies shortly.',
-
-  /* job + status */
-  'j.draft': 'Not posted yet', 'j.open': 'Waiting for workers', 'j.assigned': 'Worker confirmed',
-  'j.on_the_way': 'On the way', 'j.working': 'Work in progress', 'j.worker_done': 'Waiting for your confirmation',
-  'j.completed': 'Completed', 'j.cancelled': 'Cancelled',
-  'j.track': 'Track worker', 'j.navigate': 'Navigate', 'j.arrived': 'I have reached',
-  'j.start': 'Start work', 'j.finish': 'Work finished', 'j.confirm': 'Yes, work is done',
-  'j.accept': 'Accept this job', 'j.eta': 'Reaching in about',
-  'j.address': 'Address', 'j.openMaps': 'Open in Maps',
-
-  /* payment */
-  'y.title': 'Payment', 'y.method': 'How will you pay?', 'y.agreed': 'Agreed amount',
-  'y.pending': 'Not paid yet', 'y.paid': 'Paid', 'y.markPaid': 'Mark as paid', 'y.cash': 'Cash',
-
-  /* chat */
-  'm.title': 'Messages', 'm.ph': 'Write a message',
-  'm.onWay': 'I am on my way', 'm.reached': 'I have reached', 'm.late': 'Running late',
-  'm.callMe': 'Please call me', 'm.finished': 'Work is finished', 'm.ok': 'Okay',
-  'm.voice': 'Voice note', 'm.recording': 'Recording… press to stop',
-  'm.translated': 'Translated for you', 'm.original': 'Show original',
-  'm.empty': 'No messages yet. Say hello.',
-
-  /* SOS */
-  'x.title': 'Emergency help',
-  'x.sub': 'Only use this if you feel unsafe.',
-  'x.hold': 'Press and hold for 2 seconds',
-  'x.sent': 'Help is on the way',
-  'x.sentSub': 'Your location was shared and support has been told.',
-  'x.call112': 'Call 112 now',
-  'x.shareLoc': 'Send my location on WhatsApp',
-  'x.contact': 'Emergency contact',
-  'x.contactSet': 'Add an emergency contact so we can reach someone you trust.',
-
-  /* reviews */
-  'r.title': 'How was the work?',
-  'r.stars': 'Tap the stars',
-  'r.write': 'Say a few words',
-  'r.ph': 'For example: came on time and fixed it quickly',
-  'r.punctual': 'On time', 'r.clean': 'Left it clean', 'r.skilled': 'Knew the work', 'r.polite': 'Polite',
-  'r.submit': 'Send feedback',
-  'r.thanks': 'Thank you. This helps your neighbours choose.',
-
-  /* society + business */
-  'g.socTitle': 'Society hiring',
-  'g.socSub': 'Hire staff for your apartment or community',
-  'g.socStaff': 'Our staff',
-  'g.bizTitle': 'Business hiring',
-  'g.bizSub': 'Hire helpers, delivery and cleaning staff for your shop',
-  'g.hireFor': 'What do you need?',
-  'g.duration': 'For how long?',
-  'g.oneTime': 'One time', 'g.monthly': 'Every month', 'g.daily': 'Daily',
-  'g.staffCount': 'How many people?',
-
-  /* errors */
-  'e.required': 'Please fill this in',
-  'e.phone': 'Enter a valid 10 digit mobile number',
-  'e.aadhaar': 'Enter a valid 12 digit Aadhaar number',
-  'e.location': 'We could not get your location. Please pick your area.',
-  'e.generic': 'Something went wrong. Please try again.',
-} as const;
-
-/** Keys defined as one dictionary per language. */
-export type CoreKey = keyof typeof en;
-
-/** COMPLETE dictionary. Missing a key here is a compile error, by design. */
-export type Dict = Record<CoreKey, string>;
-
-import { hi, ta, te, kn, ml } from './i18n-a';
-import { mr, bn, gu, pa } from './i18n-b';
-import { BOOK, type BookKey } from './i18n-book';
-import { PAY, type PayKey } from './i18n-pay';
-import { DESK, type DeskKey } from './i18n-desk';
-import { SHIFT, type ShiftKey } from './i18n-shift';
-
 /**
- * Booking, payment and trust strings are stored the other way round — one
- * entry per key holding all ten languages — because that shape is far easier
- * to review and keeps related translations side by side. `satisfies` in those
- * files enforces the same completeness guarantee.
+ * Ten languages, and the compiler will not let one of them fall behind.
+ *
+ * Every string is one entry holding all ten translations together, and the
+ * `satisfies Record<string, Entry>` at the bottom means a missing language is a
+ * type error, not a screen that quietly falls back to English. Adding a string
+ * without translating it does not compile — which is the point.
+ *
+ * Keys are grouped by screen. Adding one means adding ten values. That is the
+ * cost of the promise, and it is paid at build time rather than by the person
+ * holding the phone.
  */
-export type TKey = CoreKey | BookKey | PayKey | DeskKey | ShiftKey;
 
-const CORE: Record<LangCode, Dict> = { en, hi, ta, te, kn, ml, mr, bn, gu, pa };
+export const LANGS = [
+  { code: 'en', native: 'English', english: 'English' },
+  { code: 'hi', native: 'हिन्दी', english: 'Hindi' },
+  { code: 'bn', native: 'বাংলা', english: 'Bengali' },
+  { code: 'ta', native: 'தமிழ்', english: 'Tamil' },
+  { code: 'te', native: 'తెలుగు', english: 'Telugu' },
+  { code: 'kn', native: 'ಕನ್ನಡ', english: 'Kannada' },
+  { code: 'ml', native: 'മലയാളം', english: 'Malayalam' },
+  { code: 'mr', native: 'मराठी', english: 'Marathi' },
+  { code: 'gu', native: 'ગુજરાતી', english: 'Gujarati' },
+  { code: 'pa', native: 'ਪੰਜਾਬੀ', english: 'Punjabi' },
+] as const;
 
-const WIDE = { ...BOOK, ...PAY, ...DESK, ...SHIFT } as Record<string, Record<LangCode, string>>;
+export type LangCode = (typeof LANGS)[number]['code'];
 
-/** Flattened per-language lookup, built once. */
-const DICTS: Record<LangCode, Record<string, string>> = (() => {
-  const out = {} as Record<LangCode, Record<string, string>>;
-  for (const l of Object.keys(CORE) as LangCode[]) {
-    const merged: Record<string, string> = { ...(CORE[l] as Record<string, string>) };
-    for (const k of Object.keys(WIDE)) merged[k] = WIDE[k][l];
-    out[l] = merged;
-  }
-  return out;
-})();
+export const LANG_CODES: LangCode[] = LANGS.map((l) => l.code);
 
-export function t(lang: LangCode, key: TKey): string {
-  return DICTS[lang][key as string];
+export function isLangCode(value: unknown): value is LangCode {
+  return typeof value === 'string' && (LANG_CODES as string[]).includes(value);
 }
 
-export function makeT(lang: LangCode) {
-  const d = DICTS[lang];
-  return (key: TKey) => d[key as string];
+type Entry = Record<LangCode, string>;
+
+const STRINGS = {
+  /* ------------------------------------------------------------ common */
+  appName: { en: 'LokaSetu', hi: 'लोकसेतु', bn: 'লোকসেতু', ta: 'லோகசேது', te: 'లోకసేతు', kn: 'ಲೋಕಸೇತು', ml: 'ലോകസേതു', mr: 'लोकसेतू', gu: 'લોકસેતુ', pa: 'ਲੋਕਸੇਤੂ' },
+  tagline: { en: 'Connecting the world of work', hi: 'काम की दुनिया को जोड़ते हुए', bn: 'কাজের জগৎ জুড়ছে', ta: 'வேலை உலகை இணைக்கிறோம்', te: 'పని ప్రపంచాన్ని కలుపుతోంది', kn: 'ಕೆಲಸದ ಜಗತ್ತನ್ನು ಬೆಸೆಯುತ್ತಿದೆ', ml: 'ജോലിയുടെ ലോകത്തെ ബന്ധിപ്പിക്കുന്നു', mr: 'कामाचे जग जोडत आहोत', gu: 'કામની દુનિયાને જોડીએ છીએ', pa: 'ਕੰਮ ਦੀ ਦੁਨੀਆ ਨੂੰ ਜੋੜਦੇ ਹੋਏ' },
+  loading: { en: 'Loading', hi: 'लोड हो रहा है', bn: 'লোড হচ্ছে', ta: 'ஏற்றுகிறது', te: 'లోడ్ అవుతోంది', kn: 'ಲೋಡ್ ಆಗುತ್ತಿದೆ', ml: 'ലോഡ് ചെയ്യുന്നു', mr: 'लोड होत आहे', gu: 'લોડ થઈ રહ્યું છે', pa: 'ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ' },
+  retry: { en: 'Try again', hi: 'फिर कोशिश करें', bn: 'আবার চেষ্টা করুন', ta: 'மீண்டும் முயற்சிக்கவும்', te: 'మళ్లీ ప్రయత్నించండి', kn: 'ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ', ml: 'വീണ്ടും ശ്രമിക്കുക', mr: 'पुन्हा प्रयत्न करा', gu: 'ફરી પ્રયાસ કરો', pa: 'ਮੁੜ ਕੋਸ਼ਿਸ਼ ਕਰੋ' },
+  cancel: { en: 'Cancel', hi: 'रद्द करें', bn: 'বাতিল', ta: 'ரத்து', te: 'రద్దు', kn: 'ರದ್ದುಗೊಳಿಸಿ', ml: 'റദ്ദാക്കുക', mr: 'रद्द करा', gu: 'રદ કરો', pa: 'ਰੱਦ ਕਰੋ' },
+  close: { en: 'Close', hi: 'बंद करें', bn: 'বন্ধ', ta: 'மூடு', te: 'మూసివేయి', kn: 'ಮುಚ್ಚಿ', ml: 'അടയ്ക്കുക', mr: 'बंद करा', gu: 'બંધ કરો', pa: 'ਬੰਦ ਕਰੋ' },
+  save: { en: 'Save changes', hi: 'बदलाव सहेजें', bn: 'পরিবর্তন সংরক্ষণ করুন', ta: 'மாற்றங்களைச் சேமி', te: 'మార్పులను సేవ్ చేయి', kn: 'ಬದಲಾವಣೆ ಉಳಿಸಿ', ml: 'മാറ്റങ്ങൾ സേവ് ചെയ്യുക', mr: 'बदल जतन करा', gu: 'ફેરફારો સાચવો', pa: 'ਤਬਦੀਲੀਆਂ ਸੰਭਾਲੋ' },
+  saving: { en: 'Saving', hi: 'सहेजा जा रहा है', bn: 'সংরক্ষণ হচ্ছে', ta: 'சேமிக்கிறது', te: 'సేవ్ అవుతోంది', kn: 'ಉಳಿಸಲಾಗುತ್ತಿದೆ', ml: 'സേവ് ചെയ്യുന്നു', mr: 'जतन होत आहे', gu: 'સાચવાઈ રહ્યું છે', pa: 'ਸੰਭਾਲਿਆ ਜਾ ਰਿਹਾ ਹੈ' },
+  saved: { en: 'Saved', hi: 'सहेजा गया', bn: 'সংরক্ষিত', ta: 'சேமிக்கப்பட்டது', te: 'సేవ్ అయింది', kn: 'ಉಳಿಸಲಾಗಿದೆ', ml: 'സേവ് ചെയ്തു', mr: 'जतन झाले', gu: 'સાચવ્યું', pa: 'ਸੰਭਾਲਿਆ ਗਿਆ' },
+  deleteAction: { en: 'Delete', hi: 'हटाएँ', bn: 'মুছুন', ta: 'நீக்கு', te: 'తొలగించు', kn: 'ಅಳಿಸಿ', ml: 'ഇല്ലാതാക്കുക', mr: 'हटवा', gu: 'કાઢી નાખો', pa: 'ਮਿਟਾਓ' },
+  confirmDelete: { en: 'Delete this? It cannot be undone.', hi: 'इसे हटाएँ? यह वापस नहीं आएगा।', bn: 'এটি মুছবেন? এটি ফেরানো যাবে না।', ta: 'இதை நீக்கவா? மீட்க முடியாது.', te: 'దీన్ని తొలగించాలా? తిరిగి పొందలేరు.', kn: 'ಇದನ್ನು ಅಳಿಸಬೇಕೆ? ಮರಳಿ ಪಡೆಯಲಾಗದು.', ml: 'ഇത് ഇല്ലാതാക്കണോ? തിരികെ കിട്ടില്ല.', mr: 'हे हटवायचे? परत मिळणार नाही.', gu: 'આ કાઢી નાખવું? પાછું નહીં મળે.', pa: 'ਇਹ ਮਿਟਾਉਣਾ ਹੈ? ਵਾਪਸ ਨਹੀਂ ਮਿਲੇਗਾ।' },
+  optional: { en: 'optional', hi: 'वैकल्पिक', bn: 'ঐচ্ছিক', ta: 'விருப்பம்', te: 'ఐచ్ఛికం', kn: 'ಐಚ್ಛಿಕ', ml: 'ഐച്ഛികം', mr: 'ऐच्छिक', gu: 'વૈકલ્પિક', pa: 'ਵਿਕਲਪਿਕ' },
+  searchLabel: { en: 'Search', hi: 'खोजें', bn: 'খুঁজুন', ta: 'தேடு', te: 'వెతకండి', kn: 'ಹುಡುಕಿ', ml: 'തിരയുക', mr: 'शोधा', gu: 'શોધો', pa: 'ਖੋਜੋ' },
+  somethingWrong: { en: 'Something went wrong', hi: 'कुछ गड़बड़ हो गई', bn: 'কিছু ভুল হয়েছে', ta: 'ஏதோ தவறாகிவிட்டது', te: 'ఏదో తప్పు జరిగింది', kn: 'ಏನೋ ತಪ್ಪಾಗಿದೆ', ml: 'എന്തോ കുഴപ്പം സംഭവിച്ചു', mr: 'काहीतरी चुकले', gu: 'કંઈક ખોટું થયું', pa: 'ਕੁਝ ਗਲਤ ਹੋ ਗਿਆ' },
+  notFoundBody: { en: 'That page does not exist.', hi: 'यह पृष्ठ मौजूद नहीं है।', bn: 'এই পৃষ্ঠাটি নেই।', ta: 'அந்தப் பக்கம் இல்லை.', te: 'ఆ పేజీ లేదు.', kn: 'ಆ ಪುಟ ಇಲ್ಲ.', ml: 'ആ പേജ് ഇല്ല.', mr: 'ते पान अस्तित्वात नाही.', gu: 'એ પાનું નથી.', pa: 'ਉਹ ਸਫ਼ਾ ਮੌਜੂਦ ਨਹੀਂ ਹੈ।' },
+  backHome: { en: 'Back to the feed', hi: 'फ़ीड पर वापस', bn: 'ফিডে ফিরুন', ta: 'ஊட்டத்திற்குத் திரும்பு', te: 'ఫీడ్‌కు తిరిగి', kn: 'ಫೀಡ್‌ಗೆ ಹಿಂತಿರುಗಿ', ml: 'ഫീഡിലേക്ക് മടങ്ങുക', mr: 'फीडवर परत', gu: 'ફીડ પર પાછા', pa: 'ਫੀਡ ਤੇ ਵਾਪਸ' },
+  perHour: { en: 'per hour', hi: 'प्रति घंटा', bn: 'প্রতি ঘণ্টা', ta: 'ஒரு மணிநேரத்திற்கு', te: 'గంటకు', kn: 'ಗಂಟೆಗೆ', ml: 'മണിക്കൂറിന്', mr: 'प्रति तास', gu: 'કલાક દીઠ', pa: 'ਪ੍ਰਤੀ ਘੰਟਾ' },
+  language: { en: 'Language', hi: 'भाषा', bn: 'ভাষা', ta: 'மொழி', te: 'భాష', kn: 'ಭಾಷೆ', ml: 'ഭാഷ', mr: 'भाषा', gu: 'ભાષા', pa: 'ਭਾਸ਼ਾ' },
+  appearance: { en: 'Appearance', hi: 'रूप', bn: 'চেহারা', ta: 'தோற்றம்', te: 'రూపం', kn: 'ನೋಟ', ml: 'രൂപം', mr: 'स्वरूप', gu: 'દેખાવ', pa: 'ਦਿੱਖ' },
+
+  /* --------------------------------------------------------------- nav */
+  navFeed: { en: 'Feed', hi: 'फ़ीड', bn: 'ফিড', ta: 'ஊட்டம்', te: 'ఫీడ్', kn: 'ಫೀಡ್', ml: 'ഫീഡ്', mr: 'फीड', gu: 'ફીડ', pa: 'ਫੀਡ' },
+  navNetwork: { en: 'Network', hi: 'नेटवर्क', bn: 'নেটওয়ার্ক', ta: 'வலைப்பின்னல்', te: 'నెట్‌వర్క్', kn: 'ನೆಟ್‌ವರ್ಕ್', ml: 'നെറ്റ്‌വർക്ക്', mr: 'नेटवर्क', gu: 'નેટવર્ક', pa: 'ਨੈੱਟਵਰਕ' },
+  navOffers: { en: 'Offers', hi: 'प्रस्ताव', bn: 'প্রস্তাব', ta: 'சலுகைகள்', te: 'ఆఫర్లు', kn: 'ಪ್ರಸ್ತಾಪಗಳು', ml: 'ഓഫറുകൾ', mr: 'प्रस्ताव', gu: 'પ્રસ્તાવ', pa: 'ਪੇਸ਼ਕਸ਼ਾਂ' },
+  navEarnings: { en: 'Earnings', hi: 'कमाई', bn: 'আয়', ta: 'வருவாய்', te: 'సంపాదన', kn: 'ಗಳಿಕೆ', ml: 'വരുമാനം', mr: 'कमाई', gu: 'કમાણી', pa: 'ਕਮਾਈ' },
+  navProfile: { en: 'Profile', hi: 'प्रोफ़ाइल', bn: 'প্রোফাইল', ta: 'சுயவிவரம்', te: 'ప్రొఫైల్', kn: 'ಪ್ರೊಫೈಲ್', ml: 'പ്രൊഫൈൽ', mr: 'प्रोफाइल', gu: 'પ્રોફાઇલ', pa: 'ਪਰੋਫਾਈਲ' },
+  navNewPost: { en: 'New post', hi: 'नई पोस्ट', bn: 'নতুন পোস্ট', ta: 'புதிய இடுகை', te: 'కొత్త పోస్ట్', kn: 'ಹೊಸ ಪೋಸ್ಟ್', ml: 'പുതിയ പോസ്റ്റ്', mr: 'नवीन पोस्ट', gu: 'નવી પોસ્ટ', pa: 'ਨਵੀਂ ਪੋਸਟ' },
+  signIn: { en: 'Sign in', hi: 'साइन इन', bn: 'সাইন ইন', ta: 'உள்நுழை', te: 'సైన్ ఇన్', kn: 'ಸೈನ್ ಇನ್', ml: 'സൈൻ ഇൻ', mr: 'साइन इन', gu: 'સાઇન ઇન', pa: 'ਸਾਈਨ ਇਨ' },
+  signOut: { en: 'Sign out', hi: 'साइन आउट', bn: 'সাইন আউট', ta: 'வெளியேறு', te: 'సైన్ అవుట్', kn: 'ಸೈನ್ ಔಟ್', ml: 'സൈൻ ഔട്ട്', mr: 'साइन आउट', gu: 'સાઇન આઉટ', pa: 'ਸਾਈਨ ਆਊਟ' },
+
+  /* ----------------------------------------------------------- landing */
+  heroTitle: { en: 'Find work. Name your price.', hi: 'काम पाएँ। अपना दाम तय करें।', bn: 'কাজ খুঁজুন। নিজের দাম বলুন।', ta: 'வேலை தேடுங்கள். உங்கள் விலையைச் சொல்லுங்கள்.', te: 'పని కనుక్కోండి. మీ ధర చెప్పండి.', kn: 'ಕೆಲಸ ಹುಡುಕಿ. ನಿಮ್ಮ ಬೆಲೆ ಹೇಳಿ.', ml: 'ജോലി കണ്ടെത്തുക. നിങ്ങളുടെ വില പറയുക.', mr: 'काम मिळवा. तुमची किंमत सांगा.', gu: 'કામ શોધો. તમારી કિંમત કહો.', pa: 'ਕੰਮ ਲੱਭੋ। ਆਪਣੀ ਕੀਮਤ ਦੱਸੋ।' },
+  heroSubtitle: { en: 'A hyperlocal work network where employers and workers agree on a price together, in the open, before the job starts.', hi: 'एक स्थानीय कार्य नेटवर्क जहाँ नियोक्ता और कामगार काम शुरू होने से पहले खुलकर दाम तय करते हैं।', bn: 'একটি স্থানীয় কাজের নেটওয়ার্ক, যেখানে নিয়োগকর্তা ও কর্মী কাজ শুরুর আগে খোলাখুলি দাম ঠিক করেন।', ta: 'வேலை தொடங்கும் முன் முதலாளியும் தொழிலாளியும் வெளிப்படையாக விலையை ஒப்புக்கொள்ளும் உள்ளூர் வேலை வலையமைப்பு.', te: 'పని ప్రారంభమయ్యే ముందు యజమాని, కార్మికుడు బహిరంగంగా ధరపై అంగీకరించే స్థానిక పని నెట్‌వర్క్.', kn: 'ಕೆಲಸ ಆರಂಭಕ್ಕೂ ಮೊದಲು ಮಾಲೀಕ ಮತ್ತು ಕಾರ್ಮಿಕ ಬಹಿರಂಗವಾಗಿ ಬೆಲೆ ಒಪ್ಪುವ ಸ್ಥಳೀಯ ಕೆಲಸದ ಜಾಲ.', ml: 'ജോലി തുടങ്ങും മുൻപ് തൊഴിലുടമയും തൊഴിലാളിയും തുറന്ന് വിലയിൽ യോജിക്കുന്ന പ്രാദേശിക തൊഴിൽ ശൃംഖല.', mr: 'काम सुरू होण्यापूर्वी मालक आणि कामगार उघडपणे किंमत ठरवतात असे स्थानिक कामाचे नेटवर्क.', gu: 'કામ શરૂ થાય તે પહેલાં માલિક અને કામદાર ખુલ્લેઆમ કિંમત નક્કી કરે એવું સ્થાનિક કામનું નેટવર્ક.', pa: 'ਇੱਕ ਸਥਾਨਕ ਕੰਮ ਨੈੱਟਵਰਕ ਜਿੱਥੇ ਮਾਲਕ ਅਤੇ ਕਾਮੇ ਕੰਮ ਸ਼ੁਰੂ ਹੋਣ ਤੋਂ ਪਹਿਲਾਂ ਖੁੱਲ੍ਹ ਕੇ ਕੀਮਤ ਤੈਅ ਕਰਦੇ ਹਨ।' },
+  heroCtaPrimary: { en: 'Get started', hi: 'शुरू करें', bn: 'শুরু করুন', ta: 'தொடங்கு', te: 'ప్రారంభించండి', kn: 'ಪ್ರಾರಂಭಿಸಿ', ml: 'തുടങ്ങുക', mr: 'सुरू करा', gu: 'શરૂ કરો', pa: 'ਸ਼ੁਰੂ ਕਰੋ' },
+  heroCtaSecondary: { en: 'Try a demo account', hi: 'डेमो खाता आज़माएँ', bn: 'ডেমো অ্যাকাউন্ট দেখুন', ta: 'டெமோ கணக்கை முயற்சிக்கவும்', te: 'డెమో ఖాతా ప్రయత్నించండి', kn: 'ಡೆಮೊ ಖಾತೆ ಪ್ರಯತ್ನಿಸಿ', ml: 'ഡെമോ അക്കൗണ്ട് പരീക്ഷിക്കുക', mr: 'डेमो खाते वापरा', gu: 'ડેમો ખાતું અજમાવો', pa: 'ਡੈਮੋ ਖਾਤਾ ਅਜ਼ਮਾਓ' },
+  feat1Title: { en: 'Negotiate, do not guess', hi: 'अंदाज़ा नहीं, बातचीत', bn: 'অনুমান নয়, দরকষাকষি', ta: 'யூகம் அல்ல, பேரம்', te: 'ఊహ కాదు, బేరం', kn: 'ಊಹೆ ಅಲ್ಲ, ಚೌಕಾಸಿ', ml: 'ഊഹമല്ല, വിലപേശൽ', mr: 'अंदाज नाही, वाटाघाटी', gu: 'અનુમાન નહીં, વાટાઘાટ', pa: 'ਅੰਦਾਜ਼ਾ ਨਹੀਂ, ਗੱਲਬਾਤ' },
+  feat1Body: { en: 'An employer proposes an amount. The worker accepts, declines, or counters. Every round is on the record.', hi: 'नियोक्ता राशि रखता है। कामगार स्वीकार करता है, मना करता है या नया दाम रखता है। हर दौर दर्ज रहता है।', bn: 'নিয়োগকর্তা একটি অঙ্ক প্রস্তাব করেন। কর্মী মানেন, ফেরান বা পাল্টা দাম দেন। প্রতিটি ধাপ নথিভুক্ত থাকে।', ta: 'முதலாளி ஒரு தொகையை முன்வைக்கிறார். தொழிலாளி ஏற்கலாம், மறுக்கலாம், அல்லது எதிர்விலை சொல்லலாம். ஒவ்வொரு சுற்றும் பதிவாகும்.', te: 'యజమాని ఒక మొత్తాన్ని ప్రతిపాదిస్తారు. కార్మికుడు అంగీకరించవచ్చు, తిరస్కరించవచ్చు లేదా ప్రతి-ధర చెప్పవచ్చు. ప్రతి రౌండ్ రికార్డు అవుతుంది.', kn: 'ಮಾಲೀಕ ಒಂದು ಮೊತ್ತ ಪ್ರಸ್ತಾಪಿಸುತ್ತಾರೆ. ಕಾರ್ಮಿಕ ಒಪ್ಪಬಹುದು, ನಿರಾಕರಿಸಬಹುದು ಅಥವಾ ಪ್ರತಿ-ಬೆಲೆ ಹೇಳಬಹುದು. ಪ್ರತಿ ಸುತ್ತೂ ದಾಖಲಾಗುತ್ತದೆ.', ml: 'തൊഴിലുടമ ഒരു തുക നിർദ്ദേശിക്കുന്നു. തൊഴിലാളി സ്വീകരിക്കാം, നിരസിക്കാം, അല്ലെങ്കിൽ മറുവില പറയാം. ഓരോ റൗണ്ടും രേഖയിലുണ്ട്.', mr: 'मालक रक्कम सुचवतो. कामगार स्वीकारतो, नाकारतो किंवा प्रतिकिंमत देतो. प्रत्येक फेरी नोंदली जाते.', gu: 'માલિક રકમ સૂચવે છે. કામદાર સ્વીકારે, નકારે કે સામી કિંમત આપે. દરેક રાઉન્ડ નોંધાય છે.', pa: 'ਮਾਲਕ ਰਕਮ ਪੇਸ਼ ਕਰਦਾ ਹੈ। ਕਾਮਾ ਮੰਨਦਾ ਹੈ, ਨਾਂਹ ਕਰਦਾ ਹੈ ਜਾਂ ਜਵਾਬੀ ਕੀਮਤ ਦਿੰਦਾ ਹੈ। ਹਰ ਗੇੜ ਦਰਜ ਹੁੰਦਾ ਹੈ।' },
+  feat2Title: { en: 'A real network, not a listing', hi: 'सिर्फ़ सूची नहीं, असली नेटवर्क', bn: 'শুধু তালিকা নয়, সত্যিকারের নেটওয়ার্ক', ta: 'பட்டியல் அல்ல, உண்மையான வலையமைப்பு', te: 'కేవలం జాబితా కాదు, నిజమైన నెట్‌వర్క్', kn: 'ಕೇವಲ ಪಟ್ಟಿಯಲ್ಲ, ನಿಜವಾದ ಜಾಲ', ml: 'വെറും പട്ടികയല്ല, യഥാർത്ഥ ശൃംഖല', mr: 'फक्त यादी नाही, खरे नेटवर्क', gu: 'માત્ર યાદી નહીં, સાચું નેટવર્ક', pa: 'ਸਿਰਫ਼ ਸੂਚੀ ਨਹੀਂ, ਅਸਲੀ ਨੈੱਟਵਰਕ' },
+  feat2Body: { en: 'Connect with the people you have worked with. Your next job usually comes from someone who already knows you.', hi: 'जिनके साथ काम किया है उनसे जुड़ें। अगला काम अक्सर उसी से आता है जो आपको पहले से जानता है।', bn: 'যাদের সঙ্গে কাজ করেছেন তাদের সঙ্গে যুক্ত হন। পরের কাজ প্রায়ই আসে চেনা কারও কাছ থেকেই।', ta: 'நீங்கள் பணிபுரிந்தவர்களுடன் இணையுங்கள். அடுத்த வேலை பெரும்பாலும் உங்களை ஏற்கனவே அறிந்தவரிடமிருந்தே வரும்.', te: 'మీరు కలిసి పనిచేసిన వారితో కనెక్ట్ అవ్వండి. తదుపరి పని తరచుగా మిమ్మల్ని ఇప్పటికే తెలిసిన వారి నుంచే వస్తుంది.', kn: 'ನೀವು ಕೆಲಸ ಮಾಡಿದವರೊಂದಿಗೆ ಸಂಪರ್ಕ ಬೆಳೆಸಿ. ಮುಂದಿನ ಕೆಲಸ ಹೆಚ್ಚಾಗಿ ನಿಮ್ಮನ್ನು ಈಗಾಗಲೇ ತಿಳಿದವರಿಂದಲೇ ಬರುತ್ತದೆ.', ml: 'നിങ്ങൾ ഒപ്പം ജോലി ചെയ്തവരുമായി ബന്ധപ്പെടുക. അടുത്ത ജോലി മിക്കപ്പോഴും നിങ്ങളെ അറിയുന്നവരിൽ നിന്നാണ് വരുന്നത്.', mr: 'ज्यांच्यासोबत काम केले त्यांच्याशी जोडले जा. पुढचे काम बहुतेकदा तुम्हाला आधीच ओळखणाऱ्याकडूनच येते.', gu: 'જેમની સાથે કામ કર્યું છે તેમની સાથે જોડાઓ. આગલું કામ મોટે ભાગે તમને ઓળખતા કોઈ પાસેથી જ આવે છે.', pa: 'ਜਿਨ੍ਹਾਂ ਨਾਲ ਕੰਮ ਕੀਤਾ ਹੈ ਉਨ੍ਹਾਂ ਨਾਲ ਜੁੜੋ। ਅਗਲਾ ਕੰਮ ਅਕਸਰ ਉਸੇ ਤੋਂ ਆਉਂਦਾ ਹੈ ਜੋ ਤੁਹਾਨੂੰ ਪਹਿਲਾਂ ਹੀ ਜਾਣਦਾ ਹੈ।' },
+  feat3Title: { en: 'In your language', hi: 'आपकी भाषा में', bn: 'আপনার ভাষায়', ta: 'உங்கள் மொழியில்', te: 'మీ భాషలో', kn: 'ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ', ml: 'നിങ്ങളുടെ ഭാഷയിൽ', mr: 'तुमच्या भाषेत', gu: 'તમારી ભાષામાં', pa: 'ਤੁਹਾਡੀ ਭਾਸ਼ਾ ਵਿੱਚ' },
+  feat3Body: { en: 'Ten languages, everywhere in the app. Not a partial translation that falls back to English halfway down the screen.', hi: 'ऐप में हर जगह दस भाषाएँ। आधे रास्ते अंग्रेज़ी पर लौटने वाला अधूरा अनुवाद नहीं।', bn: 'অ্যাপের সর্বত্র দশটি ভাষা। মাঝপথে ইংরেজিতে ফিরে যাওয়া অসম্পূর্ণ অনুবাদ নয়।', ta: 'செயலி முழுவதும் பத்து மொழிகள். பாதியில் ஆங்கிலத்திற்குத் திரும்பும் அரைகுறை மொழிபெயர்ப்பு அல்ல.', te: 'యాప్ అంతటా పది భాషలు. మధ్యలో ఇంగ్లీషుకు మారే అసంపూర్ణ అనువాదం కాదు.', kn: 'ಆ್ಯಪ್‌ನ ಎಲ್ಲೆಡೆ ಹತ್ತು ಭಾಷೆಗಳು. ಅರ್ಧದಲ್ಲಿ ಇಂಗ್ಲಿಷ್‌ಗೆ ಮರಳುವ ಅಪೂರ್ಣ ಅನುವಾದ ಅಲ್ಲ.', ml: 'ആപ്പിലുടനീളം പത്ത് ഭാഷകൾ. പാതിവഴിയിൽ ഇംഗ്ലീഷിലേക്ക് മടങ്ങുന്ന അപൂർണ്ണ പരിഭാഷയല്ല.', mr: 'अ‍ॅपमध्ये सर्वत्र दहा भाषा. अर्ध्यावर इंग्रजीकडे परतणारे अपूर्ण भाषांतर नाही.', gu: 'એપમાં દરેક જગ્યાએ દસ ભાષાઓ. અધવચ્ચે અંગ્રેજી પર પાછું ફરતું અધૂરું ભાષાંતર નહીં.', pa: 'ਐਪ ਵਿੱਚ ਹਰ ਥਾਂ ਦਸ ਭਾਸ਼ਾਵਾਂ। ਅੱਧ ਵਿਚਾਲੇ ਅੰਗਰੇਜ਼ੀ ਤੇ ਮੁੜਨ ਵਾਲਾ ਅਧੂਰਾ ਅਨੁਵਾਦ ਨਹੀਂ।' },
+
+  /* -------------------------------------------------------------- auth */
+  authSignInTitle: { en: 'Welcome back', hi: 'वापस स्वागत है', bn: 'আবার স্বাগতম', ta: 'மீண்டும் வருக', te: 'తిరిగి స్వాగతం', kn: 'ಮರಳಿ ಸ್ವಾಗತ', ml: 'വീണ്ടും സ്വാഗതം', mr: 'पुन्हा स्वागत', gu: 'ફરી સ્વાગત છે', pa: 'ਮੁੜ ਜੀ ਆਇਆਂ ਨੂੰ' },
+  authSignUpTitle: { en: 'Create your account', hi: 'अपना खाता बनाएँ', bn: 'আপনার অ্যাকাউন্ট তৈরি করুন', ta: 'உங்கள் கணக்கை உருவாக்கவும்', te: 'మీ ఖాతా సృష్టించండి', kn: 'ನಿಮ್ಮ ಖಾತೆ ರಚಿಸಿ', ml: 'നിങ്ങളുടെ അക്കൗണ്ട് ഉണ്ടാക്കുക', mr: 'तुमचे खाते तयार करा', gu: 'તમારું ખાતું બનાવો', pa: 'ਆਪਣਾ ਖਾਤਾ ਬਣਾਓ' },
+  authSignInSub: { en: 'Sign in to pick up where you left off.', hi: 'जहाँ छोड़ा था वहीं से जारी रखें।', bn: 'যেখানে ছেড়েছিলেন সেখান থেকেই শুরু করুন।', ta: 'விட்ட இடத்திலிருந்து தொடரவும்.', te: 'ఆపిన చోటి నుంచే కొనసాగించండి.', kn: 'ಬಿಟ್ಟಲ್ಲಿಂದಲೇ ಮುಂದುವರಿಸಿ.', ml: 'നിർത്തിയിടത്തുനിന്ന് തുടരുക.', mr: 'जिथे थांबलात तिथून सुरू करा.', gu: 'જ્યાં છોડ્યું ત્યાંથી શરૂ કરો.', pa: 'ਜਿੱਥੇ ਛੱਡਿਆ ਸੀ ਉੱਥੋਂ ਹੀ ਜਾਰੀ ਰੱਖੋ।' },
+  authSignUpSub: { en: 'It takes about a minute. Your role is chosen once and cannot be changed later.', hi: 'लगभग एक मिनट लगेगा। भूमिका एक बार चुनी जाती है और बाद में बदली नहीं जा सकती।', bn: 'প্রায় এক মিনিট লাগবে। ভূমিকা একবারই বাছা যায়, পরে বদলানো যায় না।', ta: 'ஒரு நிமிடம் ஆகும். பங்கு ஒரு முறை மட்டுமே தேர்வு செய்யப்படும், பின்னர் மாற்ற முடியாது.', te: 'సుమారు ఒక నిమిషం పడుతుంది. పాత్ర ఒకసారే ఎంచుకుంటారు, తర్వాత మార్చలేరు.', kn: 'ಸುಮಾರು ಒಂದು ನಿಮಿಷ. ಪಾತ್ರವನ್ನು ಒಮ್ಮೆ ಮಾತ್ರ ಆಯ್ಕೆ ಮಾಡಬಹುದು, ನಂತರ ಬದಲಿಸಲಾಗದು.', ml: 'ഒരു മിനിറ്റ് മതി. റോൾ ഒരിക്കൽ മാത്രം തിരഞ്ഞെടുക്കാം, പിന്നീട് മാറ്റാനാവില്ല.', mr: 'सुमारे एक मिनिट लागेल. भूमिका एकदाच निवडली जाते, नंतर बदलता येत नाही.', gu: 'લગભગ એક મિનિટ લાગશે. ભૂમિકા એક જ વાર પસંદ થાય છે, પછી બદલી શકાતી નથી.', pa: 'ਲਗਭਗ ਇੱਕ ਮਿੰਟ ਲੱਗੇਗਾ। ਭੂਮਿਕਾ ਇੱਕ ਵਾਰ ਚੁਣੀ ਜਾਂਦੀ ਹੈ ਅਤੇ ਬਾਅਦ ਵਿੱਚ ਬਦਲੀ ਨਹੀਂ ਜਾ ਸਕਦੀ।' },
+  emailLabel: { en: 'Email', hi: 'ईमेल', bn: 'ইমেল', ta: 'மின்னஞ்சல்', te: 'ఇమెయిల్', kn: 'ಇಮೇಲ್', ml: 'ഇമെയിൽ', mr: 'ईमेल', gu: 'ઈમેલ', pa: 'ਈਮੇਲ' },
+  passwordLabel: { en: 'Password', hi: 'पासवर्ड', bn: 'পাসওয়ার্ড', ta: 'கடவுச்சொல்', te: 'పాస్‌వర్డ్', kn: 'ಪಾಸ್‌ವರ್ಡ್', ml: 'പാസ്‌വേഡ്', mr: 'पासवर्ड', gu: 'પાસવર્ડ', pa: 'ਪਾਸਵਰਡ' },
+  passwordHint: { en: 'At least 6 characters', hi: 'कम से कम 6 अक्षर', bn: 'অন্তত ৬টি অক্ষর', ta: 'குறைந்தது 6 எழுத்துகள்', te: 'కనీసం 6 అక్షరాలు', kn: 'ಕನಿಷ್ಠ 6 ಅಕ್ಷರಗಳು', ml: 'കുറഞ്ഞത് 6 അക്ഷരങ്ങൾ', mr: 'किमान ६ अक्षरे', gu: 'ઓછામાં ઓછા 6 અક્ષર', pa: 'ਘੱਟੋ-ਘੱਟ 6 ਅੱਖਰ' },
+  fullNameLabel: { en: 'Full name', hi: 'पूरा नाम', bn: 'পুরো নাম', ta: 'முழுப் பெயர்', te: 'పూర్తి పేరు', kn: 'ಪೂರ್ಣ ಹೆಸರು', ml: 'മുഴുവൻ പേര്', mr: 'पूर्ण नाव', gu: 'પૂરું નામ', pa: 'ਪੂਰਾ ਨਾਮ' },
+  cityLabel: { en: 'City or neighbourhood', hi: 'शहर या इलाक़ा', bn: 'শহর বা এলাকা', ta: 'நகரம் அல்லது பகுதி', te: 'నగరం లేదా ప్రాంతం', kn: 'ನಗರ ಅಥವಾ ಪ್ರದೇಶ', ml: 'നഗരം അല്ലെങ്കിൽ പ്രദേശം', mr: 'शहर किंवा परिसर', gu: 'શહેર કે વિસ્તાર', pa: 'ਸ਼ਹਿਰ ਜਾਂ ਇਲਾਕਾ' },
+  chooseRole: { en: 'I am here to', hi: 'मैं यहाँ हूँ', bn: 'আমি এখানে', ta: 'நான் இங்கே', te: 'నేను ఇక్కడ', kn: 'ನಾನು ಇಲ್ಲಿ', ml: 'ഞാൻ ഇവിടെ', mr: 'मी येथे', gu: 'હું અહીં', pa: 'ਮੈਂ ਇੱਥੇ' },
+  roleWorker: { en: 'Find work', hi: 'काम ढूँढने', bn: 'কাজ খুঁজতে', ta: 'வேலை தேட', te: 'పని కోసం', kn: 'ಕೆಲಸ ಹುಡುಕಲು', ml: 'ജോലി തേടാൻ', mr: 'काम शोधण्यासाठी', gu: 'કામ શોધવા', pa: 'ਕੰਮ ਲੱਭਣ ਲਈ' },
+  roleEmployer: { en: 'Hire someone', hi: 'किसी को काम पर रखने', bn: 'কাউকে নিয়োগ দিতে', ta: 'ஒருவரை பணியமர்த்த', te: 'ఎవరినైనా నియమించడానికి', kn: 'ಯಾರನ್ನಾದರೂ ನೇಮಿಸಲು', ml: 'ആരെയെങ്കിലും ജോലിക്കെടുക്കാൻ', mr: 'कोणाला कामावर घेण्यासाठी', gu: 'કોઈને કામે રાખવા', pa: 'ਕਿਸੇ ਨੂੰ ਕੰਮ ਤੇ ਰੱਖਣ ਲਈ' },
+  roleWorkerHint: { en: 'Show your skills, receive offers, negotiate the price.', hi: 'अपना हुनर दिखाएँ, प्रस्ताव पाएँ, दाम तय करें।', bn: 'দক্ষতা দেখান, প্রস্তাব পান, দাম ঠিক করুন।', ta: 'திறமையைக் காட்டுங்கள், சலுகைகளைப் பெறுங்கள், விலையைப் பேசுங்கள்.', te: 'మీ నైపుణ్యాలు చూపండి, ఆఫర్లు పొందండి, ధరపై బేరమాడండి.', kn: 'ನಿಮ್ಮ ಕೌಶಲ್ಯ ತೋರಿಸಿ, ಪ್ರಸ್ತಾಪ ಪಡೆಯಿರಿ, ಬೆಲೆ ಚರ್ಚಿಸಿ.', ml: 'നിങ്ങളുടെ കഴിവ് കാണിക്കുക, ഓഫറുകൾ നേടുക, വില പേശുക.', mr: 'तुमचे कौशल्य दाखवा, प्रस्ताव मिळवा, किंमत ठरवा.', gu: 'તમારી કુશળતા બતાવો, પ્રસ્તાવ મેળવો, કિંમત નક્કી કરો.', pa: 'ਆਪਣਾ ਹੁਨਰ ਦਿਖਾਓ, ਪੇਸ਼ਕਸ਼ਾਂ ਲਵੋ, ਕੀਮਤ ਤੈਅ ਕਰੋ।' },
+  roleEmployerHint: { en: 'Post the work, propose a price, agree on the number.', hi: 'काम पोस्ट करें, दाम रखें, संख्या पर सहमत हों।', bn: 'কাজ পোস্ট করুন, দাম প্রস্তাব করুন, অঙ্কে সম্মত হোন।', ta: 'வேலையை இடுங்கள், விலையை முன்வையுங்கள், தொகையை ஒப்புக்கொள்ளுங்கள்.', te: 'పనిని పోస్ట్ చేయండి, ధర ప్రతిపాదించండి, మొత్తంపై అంగీకరించండి.', kn: 'ಕೆಲಸ ಪೋಸ್ಟ್ ಮಾಡಿ, ಬೆಲೆ ಪ್ರಸ್ತಾಪಿಸಿ, ಮೊತ್ತಕ್ಕೆ ಒಪ್ಪಿ.', ml: 'ജോലി പോസ്റ്റ് ചെയ്യുക, വില നിർദ്ദേശിക്കുക, തുകയിൽ യോജിക്കുക.', mr: 'काम पोस्ट करा, किंमत सुचवा, रकमेवर सहमत व्हा.', gu: 'કામ પોસ્ટ કરો, કિંમત સૂચવો, રકમ પર સહમત થાઓ.', pa: 'ਕੰਮ ਪੋਸਟ ਕਰੋ, ਕੀਮਤ ਪੇਸ਼ ਕਰੋ, ਰਕਮ ਤੇ ਸਹਿਮਤ ਹੋਵੋ।' },
+  createAccount: { en: 'Create account', hi: 'खाता बनाएँ', bn: 'অ্যাকাউন্ট তৈরি করুন', ta: 'கணக்கை உருவாக்கு', te: 'ఖాతా సృష్టించు', kn: 'ಖಾತೆ ರಚಿಸಿ', ml: 'അക്കൗണ്ട് ഉണ്ടാക്കുക', mr: 'खाते तयार करा', gu: 'ખાતું બનાવો', pa: 'ਖਾਤਾ ਬਣਾਓ' },
+  noAccount: { en: 'New here? Create an account', hi: 'नए हैं? खाता बनाएँ', bn: 'নতুন? অ্যাকাউন্ট তৈরি করুন', ta: 'புதியவரா? கணக்கை உருவாக்குங்கள்', te: 'కొత్తవారా? ఖాతా సృష్టించండి', kn: 'ಹೊಸಬರೇ? ಖಾತೆ ರಚಿಸಿ', ml: 'പുതിയ ആളാണോ? അക്കൗണ്ട് ഉണ്ടാക്കുക', mr: 'नवीन आहात? खाते तयार करा', gu: 'નવા છો? ખાતું બનાવો', pa: 'ਨਵੇਂ ਹੋ? ਖਾਤਾ ਬਣਾਓ' },
+  haveAccount: { en: 'Already have an account? Sign in', hi: 'पहले से खाता है? साइन इन करें', bn: 'অ্যাকাউন্ট আছে? সাইন ইন করুন', ta: 'ஏற்கனவே கணக்கு உள்ளதா? உள்நுழையவும்', te: 'ఇప్పటికే ఖాతా ఉందా? సైన్ ఇన్ చేయండి', kn: 'ಈಗಾಗಲೇ ಖಾತೆ ಇದೆಯೇ? ಸೈನ್ ಇನ್ ಮಾಡಿ', ml: 'അക്കൗണ്ട് ഉണ്ടോ? സൈൻ ഇൻ ചെയ്യുക', mr: 'आधीच खाते आहे? साइन इन करा', gu: 'પહેલેથી ખાતું છે? સાઇન ઇન કરો', pa: 'ਪਹਿਲਾਂ ਹੀ ਖਾਤਾ ਹੈ? ਸਾਈਨ ਇਨ ਕਰੋ' },
+  demoTitle: { en: 'Quick login as a demo user', hi: 'डेमो उपयोगकर्ता के रूप में तुरंत लॉगिन', bn: 'ডেমো ব্যবহারকারী হিসেবে দ্রুত লগইন', ta: 'டெமோ பயனராக விரைவு உள்நுழைவு', te: 'డెమో యూజర్‌గా వేగవంతమైన లాగిన్', kn: 'ಡೆಮೊ ಬಳಕೆದಾರರಾಗಿ ತ್ವರಿತ ಲಾಗಿನ್', ml: 'ഡെമോ ഉപയോക്താവായി പെട്ടെന്ന് ലോഗിൻ', mr: 'डेमो वापरकर्ता म्हणून झटपट लॉगिन', gu: 'ડેમો વપરાશકર્તા તરીકે ઝડપી લોગિન', pa: 'ਡੈਮੋ ਵਰਤੋਂਕਾਰ ਵਜੋਂ ਤੁਰੰਤ ਲੌਗਇਨ' },
+  demoSub: { en: 'No sign-up needed. Open two browsers and negotiate with yourself.', hi: 'साइन अप की ज़रूरत नहीं। दो ब्राउज़र खोलें और खुद से मोल-भाव करें।', bn: 'সাইন আপ লাগবে না। দুটি ব্রাউজার খুলে নিজের সঙ্গেই দরকষাকষি করুন।', ta: 'பதிவு தேவையில்லை. இரு உலாவிகளைத் திறந்து உங்களுடனேயே பேரம் பேசுங்கள்.', te: 'సైన్ అప్ అవసరం లేదు. రెండు బ్రౌజర్లు తెరిచి మీతో మీరే బేరమాడండి.', kn: 'ಸೈನ್ ಅಪ್ ಬೇಕಿಲ್ಲ. ಎರಡು ಬ್ರೌಸರ್ ತೆರೆದು ನಿಮ್ಮೊಂದಿಗೇ ಚೌಕಾಸಿ ಮಾಡಿ.', ml: 'സൈൻ അപ്പ് വേണ്ട. രണ്ട് ബ്രൗസർ തുറന്ന് നിങ്ങളോടുതന്നെ വിലപേശുക.', mr: 'साइन अप नको. दोन ब्राउझर उघडा आणि स्वतःशीच घासाघीस करा.', gu: 'સાઇન અપ જરૂરી નથી. બે બ્રાઉઝર ખોલો અને જાત સાથે જ ભાવતાલ કરો.', pa: 'ਸਾਈਨ ਅੱਪ ਦੀ ਲੋੜ ਨਹੀਂ। ਦੋ ਬ੍ਰਾਊਜ਼ਰ ਖੋਲ੍ਹੋ ਅਤੇ ਆਪਣੇ ਆਪ ਨਾਲ ਸੌਦਾ ਕਰੋ।' },
+  demoEmployer: { en: 'Demo employer', hi: 'डेमो नियोक्ता', bn: 'ডেমো নিয়োগকর্তা', ta: 'டெமோ முதலாளி', te: 'డెమో యజమాని', kn: 'ಡೆಮೊ ಮಾಲೀಕ', ml: 'ഡെമോ തൊഴിലുടമ', mr: 'डेमो मालक', gu: 'ડેમો માલિક', pa: 'ਡੈਮੋ ਮਾਲਕ' },
+  demoWorker: { en: 'Demo worker', hi: 'डेमो कामगार', bn: 'ডেমো কর্মী', ta: 'டெமோ தொழிலாளி', te: 'డెమో కార్మికుడు', kn: 'ಡೆಮೊ ಕಾರ್ಮಿಕ', ml: 'ഡെമോ തൊഴിലാളി', mr: 'डेमो कामगार', gu: 'ડેમો કામદાર', pa: 'ਡੈਮੋ ਕਾਮਾ' },
+  checkEmail: { en: 'Account created. Check your email to confirm it, then sign in.', hi: 'खाता बन गया। पुष्टि के लिए ईमेल देखें, फिर साइन इन करें।', bn: 'অ্যাকাউন্ট তৈরি হয়েছে। নিশ্চিত করতে ইমেল দেখুন, তারপর সাইন ইন করুন।', ta: 'கணக்கு உருவாக்கப்பட்டது. உறுதிப்படுத்த மின்னஞ்சலைப் பாருங்கள், பிறகு உள்நுழையவும்.', te: 'ఖాతా సృష్టించబడింది. నిర్ధారించడానికి ఇమెయిల్ చూడండి, ఆ తర్వాత సైన్ ఇన్ చేయండి.', kn: 'ಖಾತೆ ರಚನೆಯಾಗಿದೆ. ದೃಢೀಕರಿಸಲು ಇಮೇಲ್ ನೋಡಿ, ನಂತರ ಸೈನ್ ಇನ್ ಮಾಡಿ.', ml: 'അക്കൗണ്ട് ഉണ്ടാക്കി. സ്ഥിരീകരിക്കാൻ ഇമെയിൽ നോക്കുക, പിന്നെ സൈൻ ഇൻ ചെയ്യുക.', mr: 'खाते तयार झाले. पुष्टीसाठी ईमेल पहा, मग साइन इन करा.', gu: 'ખાતું બન્યું. પુષ્ટિ માટે ઈમેલ જુઓ, પછી સાઇન ઇન કરો.', pa: 'ਖਾਤਾ ਬਣ ਗਿਆ। ਪੁਸ਼ਟੀ ਲਈ ਈਮੇਲ ਵੇਖੋ, ਫਿਰ ਸਾਈਨ ਇਨ ਕਰੋ।' },
+
+  /* -------------------------------------------------------------- feed */
+  feedTitle: { en: 'Work near you', hi: 'आपके पास का काम', bn: 'আপনার কাছের কাজ', ta: 'உங்கள் அருகில் வேலை', te: 'మీ దగ్గరి పని', kn: 'ನಿಮ್ಮ ಹತ್ತಿರದ ಕೆಲಸ', ml: 'നിങ്ങൾക്കടുത്ത ജോലി', mr: 'तुमच्या जवळचे काम', gu: 'તમારી પાસેનું કામ', pa: 'ਤੁਹਾਡੇ ਨੇੜੇ ਕੰਮ' },
+  feedSub: { en: 'Everything people have posted, newest first.', hi: 'लोगों की सारी पोस्ट, नई पहले।', bn: 'সবার পোস্ট, নতুনটা আগে।', ta: 'அனைவரின் இடுகைகள், புதியவை முதலில்.', te: 'అందరి పోస్టులు, కొత్తవి ముందు.', kn: 'ಎಲ್ಲರ ಪೋಸ್ಟ್‌ಗಳು, ಹೊಸವು ಮೊದಲು.', ml: 'എല്ലാവരുടെയും പോസ്റ്റുകൾ, പുതിയത് ആദ്യം.', mr: 'सर्वांच्या पोस्ट, नवीन आधी.', gu: 'બધાની પોસ્ટ, નવી પહેલાં.', pa: 'ਸਭ ਦੀਆਂ ਪੋਸਟਾਂ, ਨਵੀਆਂ ਪਹਿਲਾਂ।' },
+  filterAll: { en: 'Everything', hi: 'सब कुछ', bn: 'সবকিছু', ta: 'அனைத்தும்', te: 'అన్నీ', kn: 'ಎಲ್ಲವೂ', ml: 'എല്ലാം', mr: 'सर्व', gu: 'બધું', pa: 'ਸਭ ਕੁਝ' },
+  filterJobs: { en: 'Jobs', hi: 'काम', bn: 'কাজ', ta: 'வேலைகள்', te: 'పనులు', kn: 'ಕೆಲಸಗಳು', ml: 'ജോലികൾ', mr: 'कामे', gu: 'કામ', pa: 'ਕੰਮ' },
+  filterUpdates: { en: 'Updates', hi: 'अपडेट', bn: 'আপডেট', ta: 'புதுப்பிப்புகள்', te: 'అప్‌డేట్లు', kn: 'ಅಪ್‌ಡೇಟ್‌ಗಳು', ml: 'അപ്ഡേറ്റുകൾ', mr: 'अपडेट', gu: 'અપડેટ', pa: 'ਅਪਡੇਟ' },
+  anyCategory: { en: 'Any category', hi: 'कोई भी श्रेणी', bn: 'যেকোনো বিভাগ', ta: 'எந்த வகையும்', te: 'ఏ విభాగమైనా', kn: 'ಯಾವುದೇ ವರ್ಗ', ml: 'ഏത് വിഭാഗവും', mr: 'कोणतीही श्रेणी', gu: 'કોઈપણ શ્રેણી', pa: 'ਕੋਈ ਵੀ ਸ਼੍ਰੇਣੀ' },
+  searchPlaceholder: { en: 'Search work, skills, places', hi: 'काम, हुनर, जगह खोजें', bn: 'কাজ, দক্ষতা, জায়গা খুঁজুন', ta: 'வேலை, திறன், இடம் தேடு', te: 'పని, నైపుణ్యం, ప్రాంతం వెతకండి', kn: 'ಕೆಲಸ, ಕೌಶಲ್ಯ, ಸ್ಥಳ ಹುಡುಕಿ', ml: 'ജോലി, കഴിവ്, സ്ഥലം തിരയുക', mr: 'काम, कौशल्य, ठिकाण शोधा', gu: 'કામ, કુશળતા, સ્થળ શોધો', pa: 'ਕੰਮ, ਹੁਨਰ, ਥਾਂ ਖੋਜੋ' },
+  emptyFeedTitle: { en: 'Nothing here yet', hi: 'यहाँ अभी कुछ नहीं', bn: 'এখনও কিছু নেই', ta: 'இன்னும் எதுவும் இல்லை', te: 'ఇంకా ఏమీ లేదు', kn: 'ಇನ್ನೂ ಏನೂ ಇಲ್ಲ', ml: 'ഇതുവരെ ഒന്നുമില്ല', mr: 'अजून काहीही नाही', gu: 'હજી કંઈ નથી', pa: 'ਅਜੇ ਇੱਥੇ ਕੁਝ ਨਹੀਂ' },
+  emptyFeedBody: { en: 'Be the first to post work or an update.', hi: 'काम या अपडेट पोस्ट करने वाले पहले बनें।', bn: 'কাজ বা আপডেট পোস্ট করা প্রথম ব্যক্তি হোন।', ta: 'வேலை அல்லது புதுப்பிப்பை முதலில் இடுங்கள்.', te: 'పని లేదా అప్‌డేట్ పోస్ట్ చేసిన మొదటి వ్యక్తి కండి.', kn: 'ಕೆಲಸ ಅಥವಾ ಅಪ್‌ಡೇಟ್ ಪೋಸ್ಟ್ ಮಾಡಿದ ಮೊದಲಿಗರಾಗಿ.', ml: 'ജോലിയോ അപ്ഡേറ്റോ ആദ്യം പോസ്റ്റ് ചെയ്യൂ.', mr: 'काम किंवा अपडेट पोस्ट करणारे पहिले व्हा.', gu: 'કામ કે અપડેટ પોસ્ટ કરનારા પહેલા બનો.', pa: 'ਕੰਮ ਜਾਂ ਅਪਡੇਟ ਪੋਸਟ ਕਰਨ ਵਾਲੇ ਪਹਿਲੇ ਬਣੋ।' },
+  budgetLabel: { en: 'Budget', hi: 'बजट', bn: 'বাজেট', ta: 'பட்ஜெட்', te: 'బడ్జెట్', kn: 'ಬಜೆಟ್', ml: 'ബജറ്റ്', mr: 'बजेट', gu: 'બજેટ', pa: 'ਬਜਟ' },
+  statusOpen: { en: 'Open', hi: 'खुला', bn: 'খোলা', ta: 'திறந்துள்ளது', te: 'తెరిచి ఉంది', kn: 'ತೆರೆದಿದೆ', ml: 'തുറന്നത്', mr: 'खुले', gu: 'ખુલ્લું', pa: 'ਖੁੱਲ੍ਹਾ' },
+  statusAssigned: { en: 'Assigned', hi: 'सौंपा गया', bn: 'বরাদ্দ', ta: 'ஒப்படைக்கப்பட்டது', te: 'కేటాయించారు', kn: 'ನಿಯೋಜಿಸಲಾಗಿದೆ', ml: 'ഏൽപ്പിച്ചു', mr: 'सोपवले', gu: 'સોંપાયું', pa: 'ਸੌਂਪਿਆ' },
+  statusCompleted: { en: 'Completed', hi: 'पूरा हुआ', bn: 'সম্পন্ন', ta: 'முடிந்தது', te: 'పూర్తయింది', kn: 'ಪೂರ್ಣಗೊಂಡಿದೆ', ml: 'പൂർത്തിയായി', mr: 'पूर्ण झाले', gu: 'પૂર્ણ', pa: 'ਮੁਕੰਮਲ' },
+  statusCancelled: { en: 'Cancelled', hi: 'रद्द', bn: 'বাতিল', ta: 'ரத்து', te: 'రద్దు', kn: 'ರದ್ದು', ml: 'റദ്ദാക്കി', mr: 'रद्द', gu: 'રદ', pa: 'ਰੱਦ' },
+  openPost: { en: 'Open and negotiate', hi: 'खोलें और मोल-भाव करें', bn: 'খুলুন ও দরকষাকষি করুন', ta: 'திறந்து பேரம் பேசு', te: 'తెరిచి బేరమాడండి', kn: 'ತೆರೆದು ಚೌಕಾಸಿ ಮಾಡಿ', ml: 'തുറന്ന് വിലപേശുക', mr: 'उघडा आणि घासाघीस करा', gu: 'ખોલો અને ભાવતાલ કરો', pa: 'ਖੋਲ੍ਹੋ ਅਤੇ ਸੌਦਾ ਕਰੋ' },
+
+  /* ----------------------------------------------------------- newpost */
+  newPostTitle: { en: 'Post something', hi: 'कुछ पोस्ट करें', bn: 'কিছু পোস্ট করুন', ta: 'ஏதாவது இடுங்கள்', te: 'ఏదైనా పోస్ట్ చేయండి', kn: 'ಏನಾದರೂ ಪೋಸ್ಟ್ ಮಾಡಿ', ml: 'എന്തെങ്കിലും പോസ്റ്റ് ചെയ്യൂ', mr: 'काहीतरी पोस्ट करा', gu: 'કંઈક પોસ્ટ કરો', pa: 'ਕੁਝ ਪੋਸਟ ਕਰੋ' },
+  newPostSub: { en: 'Work you need done, or an update for the people who follow your work.', hi: 'जो काम कराना है, या अपने काम से जुड़ा अपडेट।', bn: 'যে কাজ করাতে চান, বা আপনার কাজ সম্পর্কে আপডেট।', ta: 'செய்ய வேண்டிய வேலை, அல்லது உங்கள் வேலை குறித்த புதுப்பிப்பு.', te: 'చేయించాల్సిన పని, లేదా మీ పని గురించి అప్‌డేట్.', kn: 'ಮಾಡಿಸಬೇಕಾದ ಕೆಲಸ, ಅಥವಾ ನಿಮ್ಮ ಕೆಲಸದ ಅಪ್‌ಡೇಟ್.', ml: 'ചെയ്യിക്കേണ്ട ജോലി, അല്ലെങ്കിൽ നിങ്ങളുടെ ജോലിയെക്കുറിച്ചുള്ള അപ്ഡേറ്റ്.', mr: 'करून घ्यायचे काम, किंवा तुमच्या कामाबद्दल अपडेट.', gu: 'કરાવવાનું કામ, અથવા તમારા કામ વિશે અપડેટ.', pa: 'ਜੋ ਕੰਮ ਕਰਵਾਉਣਾ ਹੈ, ਜਾਂ ਤੁਹਾਡੇ ਕੰਮ ਬਾਰੇ ਅਪਡੇਟ।' },
+  typeJob: { en: 'A job', hi: 'एक काम', bn: 'একটি কাজ', ta: 'ஒரு வேலை', te: 'ఒక పని', kn: 'ಒಂದು ಕೆಲಸ', ml: 'ഒരു ജോലി', mr: 'एक काम', gu: 'એક કામ', pa: 'ਇੱਕ ਕੰਮ' },
+  typeUpdate: { en: 'An update', hi: 'एक अपडेट', bn: 'একটি আপডেট', ta: 'ஒரு புதுப்பிப்பு', te: 'ఒక అప్‌డేట్', kn: 'ಒಂದು ಅಪ್‌ಡೇಟ್', ml: 'ഒരു അപ്ഡേറ്റ്', mr: 'एक अपडेट', gu: 'એક અપડેટ', pa: 'ਇੱਕ ਅਪਡੇਟ' },
+  titleLabel: { en: 'Headline', hi: 'शीर्षक', bn: 'শিরোনাম', ta: 'தலைப்பு', te: 'శీర్షిక', kn: 'ಶೀರ್ಷಿಕೆ', ml: 'തലക്കെട്ട്', mr: 'शीर्षक', gu: 'મથાળું', pa: 'ਸਿਰਲੇਖ' },
+  titlePlaceholder: { en: 'Switchboard sparking in the kitchen', hi: 'रसोई का स्विचबोर्ड चिंगारी दे रहा है', bn: 'রান্নাঘরের সুইচবোর্ডে স্পার্ক হচ্ছে', ta: 'சமையலறை சுவிட்ச்போர்டில் தீப்பொறி', te: 'వంటగది స్విచ్‌బోర్డు నుంచి స్పార్క్‌లు', kn: 'ಅಡುಗೆಮನೆ ಸ್ವಿಚ್‌ಬೋರ್ಡ್‌ನಲ್ಲಿ ಕಿಡಿ', ml: 'അടുക്കളയിലെ സ്വിച്ച്ബോർഡിൽ സ്പാർക്ക്', mr: 'स्वयंपाकघरातील स्विचबोर्डमधून ठिणग्या', gu: 'રસોડાના સ્વિચબોર્ડમાં તણખા', pa: 'ਰਸੋਈ ਦੇ ਸਵਿੱਚਬੋਰਡ ਵਿੱਚ ਚੰਗਿਆੜੀਆਂ' },
+  contentLabel: { en: 'Details', hi: 'विवरण', bn: 'বিস্তারিত', ta: 'விவரங்கள்', te: 'వివరాలు', kn: 'ವಿವರಗಳು', ml: 'വിശദാംശങ്ങൾ', mr: 'तपशील', gu: 'વિગતો', pa: 'ਵੇਰਵੇ' },
+  contentPlaceholderJob: { en: 'What needs doing, when, and anything the worker should bring.', hi: 'क्या करना है, कब, और कामगार क्या साथ लाए।', bn: 'কী করতে হবে, কখন, আর কর্মী কী নিয়ে আসবেন।', ta: 'என்ன செய்ய வேண்டும், எப்போது, தொழிலாளி என்ன கொண்டு வர வேண்டும்.', te: 'ఏమి చేయాలి, ఎప్పుడు, కార్మికుడు ఏమి తీసుకురావాలి.', kn: 'ಏನು ಮಾಡಬೇಕು, ಯಾವಾಗ, ಕಾರ್ಮಿಕ ಏನು ತರಬೇಕು.', ml: 'എന്ത് ചെയ്യണം, എപ്പോൾ, തൊഴിലാളി എന്ത് കൊണ്ടുവരണം.', mr: 'काय करायचे, कधी, आणि कामगाराने काय आणावे.', gu: 'શું કરવાનું છે, ક્યારે, અને કામદારે શું લાવવું.', pa: 'ਕੀ ਕਰਨਾ ਹੈ, ਕਦੋਂ, ਅਤੇ ਕਾਮਾ ਕੀ ਲਿਆਵੇ।' },
+  contentPlaceholderUpdate: { en: 'What you are available for this week.', hi: 'इस हफ़्ते आप किस काम के लिए उपलब्ध हैं।', bn: 'এই সপ্তাহে আপনি কোন কাজের জন্য আছেন।', ta: 'இந்த வாரம் நீங்கள் எந்த வேலைக்குக் கிடைக்கிறீர்கள்.', te: 'ఈ వారం మీరు ఏ పనికి అందుబాటులో ఉన్నారు.', kn: 'ಈ ವಾರ ನೀವು ಯಾವ ಕೆಲಸಕ್ಕೆ ಲಭ್ಯ.', ml: 'ഈ ആഴ്ച നിങ്ങൾ ഏത് ജോലിക്ക് ലഭ്യമാണ്.', mr: 'या आठवड्यात तुम्ही कोणत्या कामासाठी उपलब्ध आहात.', gu: 'આ અઠવાડિયે તમે કયા કામ માટે ઉપલબ્ધ છો.', pa: 'ਇਸ ਹਫ਼ਤੇ ਤੁਸੀਂ ਕਿਸ ਕੰਮ ਲਈ ਉਪਲਬਧ ਹੋ।' },
+  categoryLabel: { en: 'Category', hi: 'श्रेणी', bn: 'বিভাগ', ta: 'வகை', te: 'విభాగం', kn: 'ವರ್ಗ', ml: 'വിഭാഗം', mr: 'श्रेणी', gu: 'શ્રેણી', pa: 'ਸ਼੍ਰੇਣੀ' },
+  budgetPlaceholder: { en: 'What you expect to pay', hi: 'आप कितना देना चाहते हैं', bn: 'আপনি কত দিতে চান', ta: 'நீங்கள் எவ்வளவு தர எதிர்பார்க்கிறீர்கள்', te: 'మీరు ఎంత చెల్లించాలనుకుంటున్నారు', kn: 'ನೀವು ಎಷ್ಟು ನೀಡಲು ಬಯಸುತ್ತೀರಿ', ml: 'നിങ്ങൾ എത്ര നൽകാൻ ഉദ്ദേശിക്കുന്നു', mr: 'तुम्ही किती देऊ इच्छिता', gu: 'તમે કેટલું આપવા માગો છો', pa: 'ਤੁਸੀਂ ਕਿੰਨਾ ਦੇਣਾ ਚਾਹੁੰਦੇ ਹੋ' },
+  locationLabel: { en: 'Where', hi: 'कहाँ', bn: 'কোথায়', ta: 'எங்கே', te: 'ఎక్కడ', kn: 'ಎಲ್ಲಿ', ml: 'എവിടെ', mr: 'कुठे', gu: 'ક્યાં', pa: 'ਕਿੱਥੇ' },
+  mediaLabel: { en: 'Image link', hi: 'चित्र लिंक', bn: 'ছবির লিংক', ta: 'படத்தின் இணைப்பு', te: 'చిత్రం లింక్', kn: 'ಚಿತ್ರದ ಕೊಂಡಿ', ml: 'ചിത്ര ലിങ്ക്', mr: 'चित्र दुवा', gu: 'છબી લિંક', pa: 'ਤਸਵੀਰ ਲਿੰਕ' },
+  publish: { en: 'Publish', hi: 'प्रकाशित करें', bn: 'প্রকাশ করুন', ta: 'வெளியிடு', te: 'ప్రచురించు', kn: 'ಪ್ರಕಟಿಸಿ', ml: 'പ്രസിദ്ധീകരിക്കുക', mr: 'प्रकाशित करा', gu: 'પ્રકાશિત કરો', pa: 'ਪ੍ਰਕਾਸ਼ਿਤ ਕਰੋ' },
+
+  /* -------------------------------------------------------- post detail */
+  postNotFound: { en: 'That post is gone.', hi: 'वह पोस्ट नहीं रही।', bn: 'সেই পোস্টটি নেই।', ta: 'அந்த இடுகை இல்லை.', te: 'ఆ పోస్ట్ లేదు.', kn: 'ಆ ಪೋಸ್ಟ್ ಇಲ್ಲ.', ml: 'ആ പോസ്റ്റ് ഇല്ല.', mr: 'ती पोस्ट नाही.', gu: 'એ પોસ્ટ નથી.', pa: 'ਉਹ ਪੋਸਟ ਨਹੀਂ ਰਹੀ।' },
+  negotiationTitle: { en: 'Price negotiation', hi: 'दाम पर बातचीत', bn: 'দাম নিয়ে আলোচনা', ta: 'விலை பேரம்', te: 'ధరపై బేరం', kn: 'ಬೆಲೆ ಚೌಕಾಸಿ', ml: 'വില വിലപേശൽ', mr: 'किंमत वाटाघाटी', gu: 'કિંમત વાટાઘાટ', pa: 'ਕੀਮਤ ਦੀ ਗੱਲਬਾਤ' },
+  negotiationSub: { en: 'Only the two people in an offer can see it.', hi: 'प्रस्ताव सिर्फ़ उन दो लोगों को दिखता है।', bn: 'প্রস্তাবটি কেবল দু’জনই দেখতে পান।', ta: 'சலுகையை அதில் உள்ள இருவர் மட்டுமே பார்க்க முடியும்.', te: 'ఆఫర్‌ను అందులోని ఇద్దరే చూడగలరు.', kn: 'ಪ್ರಸ್ತಾಪವನ್ನು ಅದರಲ್ಲಿರುವ ಇಬ್ಬರೇ ನೋಡಬಹುದು.', ml: 'ഓഫർ അതിലുള്ള രണ്ടുപേർക്ക് മാത്രമേ കാണാനാകൂ.', mr: 'प्रस्ताव फक्त त्यातील दोघांनाच दिसतो.', gu: 'પ્રસ્તાવ ફક્ત તેમાંના બે જ જોઈ શકે.', pa: 'ਪੇਸ਼ਕਸ਼ ਸਿਰਫ਼ ਉਨ੍ਹਾਂ ਦੋਹਾਂ ਨੂੰ ਦਿਸਦੀ ਹੈ।' },
+  noOffersTitle: { en: 'No offers on this yet', hi: 'अभी कोई प्रस्ताव नहीं', bn: 'এখনও কোনো প্রস্তাব নেই', ta: 'இதற்கு இன்னும் சலுகை இல்லை', te: 'దీనిపై ఇంకా ఆఫర్లు లేవు', kn: 'ಇದಕ್ಕೆ ಇನ್ನೂ ಪ್ರಸ್ತಾಪವಿಲ್ಲ', ml: 'ഇതിന് ഇതുവരെ ഓഫറില്ല', mr: 'यावर अजून प्रस्ताव नाही', gu: 'આના પર હજી પ્રસ્તાવ નથી', pa: 'ਇਸ ਤੇ ਅਜੇ ਕੋਈ ਪੇਸ਼ਕਸ਼ ਨਹੀਂ' },
+  noOffersBody: { en: 'When someone proposes a price, the whole back-and-forth shows up here.', hi: 'जब कोई दाम रखेगा, पूरी बातचीत यहीं दिखेगी।', bn: 'কেউ দাম প্রস্তাব করলে পুরো আলোচনা এখানেই দেখা যাবে।', ta: 'யாராவது விலை சொன்னால், முழு உரையாடலும் இங்கே தெரியும்.', te: 'ఎవరైనా ధర ప్రతిపాదిస్తే, మొత్తం సంభాషణ ఇక్కడే కనిపిస్తుంది.', kn: 'ಯಾರಾದರೂ ಬೆಲೆ ಹೇಳಿದರೆ, ಇಡೀ ಮಾತುಕತೆ ಇಲ್ಲೇ ಕಾಣುತ್ತದೆ.', ml: 'ആരെങ്കിലും വില പറഞ്ഞാൽ, മുഴുവൻ സംഭാഷണവും ഇവിടെ കാണാം.', mr: 'कोणी किंमत सुचवली की संपूर्ण संवाद इथेच दिसेल.', gu: 'કોઈ કિંમત સૂચવે તો આખી વાતચીત અહીં દેખાશે.', pa: 'ਜਦੋਂ ਕੋਈ ਕੀਮਤ ਦੱਸੇਗਾ, ਪੂਰੀ ਗੱਲਬਾਤ ਇੱਥੇ ਦਿਸੇਗੀ।' },
+  proposePrice: { en: 'Propose a custom price', hi: 'अपना दाम रखें', bn: 'নিজের দাম প্রস্তাব করুন', ta: 'உங்கள் விலையை முன்வையுங்கள்', te: 'మీ ధరను ప్రతిపాదించండి', kn: 'ನಿಮ್ಮ ಬೆಲೆ ಪ್ರಸ್ತಾಪಿಸಿ', ml: 'നിങ്ങളുടെ വില നിർദ്ദേശിക്കുക', mr: 'तुमची किंमत सुचवा', gu: 'તમારી કિંમત સૂચવો', pa: 'ਆਪਣੀ ਕੀਮਤ ਪੇਸ਼ ਕਰੋ' },
+  amountLabel: { en: 'Amount', hi: 'राशि', bn: 'পরিমাণ', ta: 'தொகை', te: 'మొత్తం', kn: 'ಮೊತ್ತ', ml: 'തുക', mr: 'रक्कम', gu: 'રકમ', pa: 'ਰਕਮ' },
+  messageLabel: { en: 'Message', hi: 'संदेश', bn: 'বার্তা', ta: 'செய்தி', te: 'సందేశం', kn: 'ಸಂದೇಶ', ml: 'സന്ദേശം', mr: 'संदेश', gu: 'સંદેશ', pa: 'ਸੁਨੇਹਾ' },
+  sendOffer: { en: 'Send offer', hi: 'प्रस्ताव भेजें', bn: 'প্রস্তাব পাঠান', ta: 'சலுகையை அனுப்பு', te: 'ఆఫర్ పంపండి', kn: 'ಪ್ರಸ್ತಾಪ ಕಳುಹಿಸಿ', ml: 'ഓഫർ അയയ്ക്കുക', mr: 'प्रस्ताव पाठवा', gu: 'પ્રસ્તાવ મોકલો', pa: 'ਪੇਸ਼ਕਸ਼ ਭੇਜੋ' },
+  offerSent: { en: 'Offer sent', hi: 'प्रस्ताव भेजा गया', bn: 'প্রস্তাব পাঠানো হয়েছে', ta: 'சலுகை அனுப்பப்பட்டது', te: 'ఆఫర్ పంపబడింది', kn: 'ಪ್ರಸ್ತಾಪ ಕಳುಹಿಸಲಾಗಿದೆ', ml: 'ഓഫർ അയച്ചു', mr: 'प्रस्ताव पाठवला', gu: 'પ્રસ્તાવ મોકલ્યો', pa: 'ਪੇਸ਼ਕਸ਼ ਭੇਜੀ ਗਈ' },
+  onlyEmployersOffer: { en: 'Only employer accounts can propose a price.', hi: 'सिर्फ़ नियोक्ता खाते दाम रख सकते हैं।', bn: 'কেবল নিয়োগকর্তার অ্যাকাউন্ট দাম প্রস্তাব করতে পারে।', ta: 'முதலாளி கணக்குகள் மட்டுமே விலை சொல்ல முடியும்.', te: 'యజమాని ఖాతాలు మాత్రమే ధర ప్రతిపాదించగలవు.', kn: 'ಮಾಲೀಕ ಖಾತೆಗಳು ಮಾತ್ರ ಬೆಲೆ ಪ್ರಸ್ತಾಪಿಸಬಹುದು.', ml: 'തൊഴിലുടമ അക്കൗണ്ടുകൾക്ക് മാത്രമേ വില നിർദ്ദേശിക്കാനാകൂ.', mr: 'फक्त मालक खातीच किंमत सुचवू शकतात.', gu: 'ફક્ત માલિક ખાતાં જ કિંમત સૂચવી શકે.', pa: 'ਸਿਰਫ਼ ਮਾਲਕ ਖਾਤੇ ਹੀ ਕੀਮਤ ਪੇਸ਼ ਕਰ ਸਕਦੇ ਹਨ।' },
+  markAssigned: { en: 'Mark as assigned', hi: 'सौंपा गया चिह्नित करें', bn: 'বরাদ্দ হিসেবে চিহ্নিত করুন', ta: 'ஒப்படைக்கப்பட்டதாகக் குறி', te: 'కేటాయించినట్లు గుర్తించండి', kn: 'ನಿಯೋಜಿಸಲಾಗಿದೆ ಎಂದು ಗುರುತಿಸಿ', ml: 'ഏൽപ്പിച്ചതായി അടയാളപ്പെടുത്തുക', mr: 'सोपवले म्हणून चिन्हांकित करा', gu: 'સોંપાયું તરીકે ચિહ્નિત કરો', pa: 'ਸੌਂਪਿਆ ਵਜੋਂ ਨਿਸ਼ਾਨ ਲਾਓ' },
+  markCompleted: { en: 'Mark as completed', hi: 'पूरा हुआ चिह्नित करें', bn: 'সম্পন্ন হিসেবে চিহ্নিত করুন', ta: 'முடிந்ததாகக் குறி', te: 'పూర్తయినట్లు గుర్తించండి', kn: 'ಪೂರ್ಣಗೊಂಡಿದೆ ಎಂದು ಗುರುತಿಸಿ', ml: 'പൂർത്തിയായതായി അടയാളപ്പെടുത്തുക', mr: 'पूर्ण म्हणून चिन्हांकित करा', gu: 'પૂર્ણ તરીકે ચિહ્નિત કરો', pa: 'ਮੁਕੰਮਲ ਵਜੋਂ ਨਿਸ਼ਾਨ ਲਾਓ' },
+  reopenPost: { en: 'Reopen', hi: 'फिर खोलें', bn: 'আবার খুলুন', ta: 'மீண்டும் திற', te: 'మళ్లీ తెరవండి', kn: 'ಮತ್ತೆ ತೆರೆಯಿರಿ', ml: 'വീണ്ടും തുറക്കുക', mr: 'पुन्हा उघडा', gu: 'ફરી ખોલો', pa: 'ਮੁੜ ਖੋਲ੍ਹੋ' },
+
+  /* ------------------------------------------------------------ offers */
+  offersTitle: { en: 'Negotiations', hi: 'मोल-भाव', bn: 'দরকষাকষি', ta: 'பேரங்கள்', te: 'బేరాలు', kn: 'ಚೌಕಾಸಿಗಳು', ml: 'വിലപേശലുകൾ', mr: 'वाटाघाटी', gu: 'વાટાઘાટો', pa: 'ਸੌਦੇਬਾਜ਼ੀ' },
+  offersSub: { en: 'Every price on the table, and whose move it is.', hi: 'हर दाम, और अब बारी किसकी है।', bn: 'প্রতিটি দাম, আর এখন কার পালা।', ta: 'ஒவ்வொரு விலையும், இப்போது யாருடைய முறை.', te: 'ప్రతి ధర, ఇప్పుడు ఎవరి వంతు.', kn: 'ಪ್ರತಿ ಬೆಲೆ, ಮತ್ತು ಈಗ ಯಾರ ಸರದಿ.', ml: 'ഓരോ വിലയും, ഇപ്പോൾ ആരുടെ ഊഴം.', mr: 'प्रत्येक किंमत, आणि आता कोणाची पाळी.', gu: 'દરેક કિંમત, અને હવે કોનો વારો.', pa: 'ਹਰ ਕੀਮਤ, ਅਤੇ ਹੁਣ ਕਿਸ ਦੀ ਵਾਰੀ।' },
+  tabIncoming: { en: 'Needs your answer', hi: 'आपके जवाब का इंतज़ार', bn: 'আপনার উত্তরের অপেক্ষায়', ta: 'உங்கள் பதிலுக்குக் காத்திருக்கிறது', te: 'మీ సమాధానం కావాలి', kn: 'ನಿಮ್ಮ ಉತ್ತರ ಬೇಕು', ml: 'നിങ്ങളുടെ മറുപടി വേണം', mr: 'तुमच्या उत्तराची वाट', gu: 'તમારા જવાબની રાહ', pa: 'ਤੁਹਾਡੇ ਜਵਾਬ ਦੀ ਉਡੀਕ' },
+  tabOutgoing: { en: 'Waiting on them', hi: 'उनके जवाब का इंतज़ार', bn: 'তাদের উত্তরের অপেক্ষায়', ta: 'அவர்கள் பதிலுக்குக் காத்திருக்கிறது', te: 'వారి సమాధానం కోసం', kn: 'ಅವರ ಉತ್ತರಕ್ಕಾಗಿ', ml: 'അവരുടെ മറുപടിക്കായി', mr: 'त्यांच्या उत्तराची वाट', gu: 'તેમના જવાબની રાહ', pa: 'ਉਨ੍ਹਾਂ ਦੇ ਜਵਾਬ ਦੀ ਉਡੀਕ' },
+  tabSettled: { en: 'Settled', hi: 'तय हो चुका', bn: 'নিষ্পত্তি', ta: 'முடிவானது', te: 'పరిష్కారమైనవి', kn: 'ಇತ್ಯರ್ಥವಾದವು', ml: 'തീരുമാനമായവ', mr: 'ठरलेले', gu: 'નક્કી થયેલા', pa: 'ਤੈਅ ਹੋ ਚੁੱਕੇ' },
+  accept: { en: 'Accept', hi: 'स्वीकार करें', bn: 'গ্রহণ করুন', ta: 'ஏற்கவும்', te: 'అంగీకరించు', kn: 'ಒಪ್ಪಿ', ml: 'സ്വീകരിക്കുക', mr: 'स्वीकारा', gu: 'સ્વીકારો', pa: 'ਮੰਨੋ' },
+  decline: { en: 'Decline', hi: 'मना करें', bn: 'ফিরিয়ে দিন', ta: 'மறுக்கவும்', te: 'తిరస్కరించు', kn: 'ನಿರಾಕರಿಸಿ', ml: 'നിരസിക്കുക', mr: 'नाकारा', gu: 'નકારો', pa: 'ਨਾਂਹ ਕਰੋ' },
+  counter: { en: 'Counter', hi: 'नया दाम', bn: 'পাল্টা দাম', ta: 'எதிர்விலை', te: 'ప్రతి-ధర', kn: 'ಪ್ರತಿ-ಬೆಲೆ', ml: 'മറുവില', mr: 'प्रतिकिंमत', gu: 'સામી કિંમત', pa: 'ਜਵਾਬੀ ਕੀਮਤ' },
+  withdraw: { en: 'Withdraw', hi: 'वापस लें', bn: 'প্রত্যাহার', ta: 'திரும்பப் பெறு', te: 'ఉపసంహరించు', kn: 'ಹಿಂಪಡೆಯಿರಿ', ml: 'പിൻവലിക്കുക', mr: 'मागे घ्या', gu: 'પાછું ખેંચો', pa: 'ਵਾਪਸ ਲਵੋ' },
+  statusPending: { en: 'Pending', hi: 'लंबित', bn: 'অপেক্ষমাণ', ta: 'நிலுவையில்', te: 'పెండింగ్', kn: 'ಬಾಕಿ', ml: 'തീർപ്പാകാത്തത്', mr: 'प्रलंबित', gu: 'બાકી', pa: 'ਬਕਾਇਆ' },
+  statusAccepted: { en: 'Accepted', hi: 'स्वीकृत', bn: 'গৃহীত', ta: 'ஏற்கப்பட்டது', te: 'ఆమోదించారు', kn: 'ಒಪ್ಪಿಗೆಯಾಗಿದೆ', ml: 'സ്വീകരിച്ചു', mr: 'स्वीकारले', gu: 'સ્વીકારાયું', pa: 'ਮੰਨਿਆ ਗਿਆ' },
+  statusDeclined: { en: 'Declined', hi: 'अस्वीकृत', bn: 'প্রত্যাখ্যাত', ta: 'மறுக்கப்பட்டது', te: 'తిరస్కరించారు', kn: 'ನಿರಾಕರಿಸಲಾಗಿದೆ', ml: 'നിരസിച്ചു', mr: 'नाकारले', gu: 'નકારાયું', pa: 'ਨਾਂਹ ਕੀਤੀ' },
+  statusCountered: { en: 'Countered', hi: 'नया दाम रखा', bn: 'পাল্টা প্রস্তাব', ta: 'எதிர்விலை சொல்லப்பட்டது', te: 'ప్రతి-ధర ఇచ్చారు', kn: 'ಪ್ರತಿ-ಬೆಲೆ ನೀಡಲಾಗಿದೆ', ml: 'മറുവില നൽകി', mr: 'प्रतिकिंमत दिली', gu: 'સામી કિંમત અપાઈ', pa: 'ਜਵਾਬੀ ਕੀਮਤ ਦਿੱਤੀ' },
+  waitingYou: { en: 'Your move', hi: 'आपकी बारी', bn: 'আপনার পালা', ta: 'உங்கள் முறை', te: 'మీ వంతు', kn: 'ನಿಮ್ಮ ಸರದಿ', ml: 'നിങ്ങളുടെ ഊഴം', mr: 'तुमची पाळी', gu: 'તમારો વારો', pa: 'ਤੁਹਾਡੀ ਵਾਰੀ' },
+  waitingThem: { en: 'Their move', hi: 'उनकी बारी', bn: 'তাদের পালা', ta: 'அவர்கள் முறை', te: 'వారి వంతు', kn: 'ಅವರ ಸರದಿ', ml: 'അവരുടെ ഊഴം', mr: 'त्यांची पाळी', gu: 'તેમનો વારો', pa: 'ਉਨ੍ਹਾਂ ਦੀ ਵਾਰੀ' },
+  roundLabel: { en: 'Round', hi: 'दौर', bn: 'রাউন্ড', ta: 'சுற்று', te: 'రౌండ్', kn: 'ಸುತ್ತು', ml: 'റൗണ്ട്', mr: 'फेरी', gu: 'રાઉન્ડ', pa: 'ਗੇੜ' },
+  currentPrice: { en: 'On the table', hi: 'मौजूदा दाम', bn: 'বর্তমান দাম', ta: 'தற்போதைய விலை', te: 'ప్రస్తుత ధర', kn: 'ಪ್ರಸ್ತುತ ಬೆಲೆ', ml: 'നിലവിലെ വില', mr: 'सध्याची किंमत', gu: 'હાલની કિંમત', pa: 'ਮੌਜੂਦਾ ਕੀਮਤ' },
+  counterTitle: { en: 'Name your price', hi: 'अपना दाम बताएँ', bn: 'নিজের দাম বলুন', ta: 'உங்கள் விலையைச் சொல்லுங்கள்', te: 'మీ ధర చెప్పండి', kn: 'ನಿಮ್ಮ ಬೆಲೆ ಹೇಳಿ', ml: 'നിങ്ങളുടെ വില പറയുക', mr: 'तुमची किंमत सांगा', gu: 'તમારી કિંમત કહો', pa: 'ਆਪਣੀ ਕੀਮਤ ਦੱਸੋ' },
+  counterSub: { en: 'The other side answers next. Neither of you can accept your own number.', hi: 'अब जवाब दूसरे पक्ष का। कोई अपना ही दाम स्वीकार नहीं कर सकता।', bn: 'এখন উত্তর অন্য পক্ষের। কেউ নিজের দাম নিজে মানতে পারে না।', ta: 'அடுத்து மறுபக்கம் பதிலளிக்கும். யாரும் தங்கள் விலையைத் தாங்களே ஏற்க முடியாது.', te: 'తర్వాత అవతలి పక్షం సమాధానం ఇస్తుంది. ఎవరూ తమ ధరను తామే అంగీకరించలేరు.', kn: 'ಮುಂದೆ ಇನ್ನೊಂದು ಕಡೆ ಉತ್ತರಿಸುತ್ತದೆ. ಯಾರೂ ತಮ್ಮದೇ ಬೆಲೆಯನ್ನು ತಾವೇ ಒಪ್ಪಲಾಗದು.', ml: 'അടുത്തത് മറുവശം മറുപടി പറയും. ആരും സ്വന്തം വില സ്വയം സ്വീകരിക്കാനാവില്ല.', mr: 'आता दुसरी बाजू उत्तर देईल. कोणीही स्वतःची किंमत स्वतः स्वीकारू शकत नाही.', gu: 'હવે સામી બાજુ જવાબ આપશે. કોઈ પોતાની જ કિંમત સ્વીકારી શકે નહીં.', pa: 'ਹੁਣ ਦੂਜੀ ਧਿਰ ਜਵਾਬ ਦੇਵੇਗੀ। ਕੋਈ ਵੀ ਆਪਣੀ ਹੀ ਕੀਮਤ ਨਹੀਂ ਮੰਨ ਸਕਦਾ।' },
+  cannotAcceptOwn: { en: 'You named this price. Waiting for them.', hi: 'यह दाम आपने रखा है। उनके जवाब का इंतज़ार।', bn: 'এই দাম আপনি বলেছেন। তাদের উত্তরের অপেক্ষা।', ta: 'இந்த விலையை நீங்கள் சொன்னீர்கள். அவர்கள் பதிலுக்குக் காத்திருக்கிறோம்.', te: 'ఈ ధర మీరు చెప్పారు. వారి సమాధానం కోసం వేచి ఉన్నాం.', kn: 'ಈ ಬೆಲೆಯನ್ನು ನೀವು ಹೇಳಿದ್ದೀರಿ. ಅವರ ಉತ್ತರಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ.', ml: 'ഈ വില നിങ്ങൾ പറഞ്ഞതാണ്. അവരുടെ മറുപടിക്കായി കാത്തിരിക്കുന്നു.', mr: 'ही किंमत तुम्ही सांगितली आहे. त्यांच्या उत्तराची वाट.', gu: 'આ કિંમત તમે કહી છે. તેમના જવાબની રાહ.', pa: 'ਇਹ ਕੀਮਤ ਤੁਸੀਂ ਦੱਸੀ ਹੈ। ਉਨ੍ਹਾਂ ਦੇ ਜਵਾਬ ਦੀ ਉਡੀਕ।' },
+  noOffersYet: { en: 'No negotiations yet', hi: 'अभी कोई मोल-भाव नहीं', bn: 'এখনও কোনো দরকষাকষি নেই', ta: 'இன்னும் பேரம் இல்லை', te: 'ఇంకా బేరాలు లేవు', kn: 'ಇನ್ನೂ ಚೌಕಾಸಿ ಇಲ್ಲ', ml: 'ഇതുവരെ വിലപേശലില്ല', mr: 'अजून वाटाघाटी नाहीत', gu: 'હજી કોઈ વાટાઘાટ નથી', pa: 'ਅਜੇ ਕੋਈ ਸੌਦੇਬਾਜ਼ੀ ਨਹੀਂ' },
+  noOffersYetBody: { en: 'Open a job in the feed and propose a price, or wait for one to arrive.', hi: 'फ़ीड में कोई काम खोलें और दाम रखें, या प्रस्ताव आने का इंतज़ार करें।', bn: 'ফিডে কোনো কাজ খুলে দাম প্রস্তাব করুন, বা প্রস্তাবের অপেক্ষা করুন।', ta: 'ஊட்டத்தில் ஒரு வேலையைத் திறந்து விலை சொல்லுங்கள், அல்லது ஒன்று வரக் காத்திருங்கள்.', te: 'ఫీడ్‌లో ఒక పని తెరిచి ధర చెప్పండి, లేదా ఒకటి రావడానికి వేచి ఉండండి.', kn: 'ಫೀಡ್‌ನಲ್ಲಿ ಒಂದು ಕೆಲಸ ತೆರೆದು ಬೆಲೆ ಹೇಳಿ, ಅಥವಾ ಒಂದು ಬರುವವರೆಗೆ ಕಾಯಿರಿ.', ml: 'ഫീഡിൽ ഒരു ജോലി തുറന്ന് വില പറയുക, അല്ലെങ്കിൽ ഒന്ന് വരാൻ കാത്തിരിക്കുക.', mr: 'फीडमध्ये एखादे काम उघडून किंमत सुचवा, किंवा एक येण्याची वाट पहा.', gu: 'ફીડમાં કોઈ કામ ખોલીને કિંમત સૂચવો, અથવા એકની રાહ જુઓ.', pa: 'ਫੀਡ ਵਿੱਚ ਕੋਈ ਕੰਮ ਖੋਲ੍ਹ ਕੇ ਕੀਮਤ ਦੱਸੋ, ਜਾਂ ਇੱਕ ਆਉਣ ਦੀ ਉਡੀਕ ਕਰੋ।' },
+
+  /* ----------------------------------------------------------- network */
+  networkTitle: { en: 'Your network', hi: 'आपका नेटवर्क', bn: 'আপনার নেটওয়ার্ক', ta: 'உங்கள் வலையமைப்பு', te: 'మీ నెట్‌వర్క్', kn: 'ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್', ml: 'നിങ്ങളുടെ നെറ്റ്‌വർക്ക്', mr: 'तुमचे नेटवर्क', gu: 'તમારું નેટવર્ક', pa: 'ਤੁਹਾਡਾ ਨੈੱਟਵਰਕ' },
+  networkSub: { en: 'People you have worked with, and people worth knowing.', hi: 'जिनके साथ काम किया, और जिन्हें जानना अच्छा रहेगा।', bn: 'যাদের সঙ্গে কাজ করেছেন, আর যাদের চেনা ভালো।', ta: 'நீங்கள் பணிபுரிந்தவர்கள், மற்றும் தெரிந்துகொள்ளத் தகுந்தவர்கள்.', te: 'మీరు కలిసి పనిచేసినవారు, తెలుసుకోదగినవారు.', kn: 'ನೀವು ಕೆಲಸ ಮಾಡಿದವರು, ಮತ್ತು ತಿಳಿಯಬೇಕಾದವರು.', ml: 'നിങ്ങൾ ഒപ്പം ജോലി ചെയ്തവർ, അറിയേണ്ടവർ.', mr: 'ज्यांच्यासोबत काम केले, आणि ओळख ठेवावी असे.', gu: 'જેમની સાથે કામ કર્યું, અને જેમને ઓળખવા જેવા છે.', pa: 'ਜਿਨ੍ਹਾਂ ਨਾਲ ਕੰਮ ਕੀਤਾ, ਅਤੇ ਜਿਨ੍ਹਾਂ ਨੂੰ ਜਾਣਨਾ ਚੰਗਾ ਹੈ।' },
+  tabDiscover: { en: 'Discover', hi: 'खोजें', bn: 'খুঁজে দেখুন', ta: 'கண்டறி', te: 'కనుగొనండి', kn: 'ಅನ್ವೇಷಿಸಿ', ml: 'കണ്ടെത്തുക', mr: 'शोधा', gu: 'શોધો', pa: 'ਲੱਭੋ' },
+  tabRequests: { en: 'Requests', hi: 'अनुरोध', bn: 'অনুরোধ', ta: 'கோரிக்கைகள்', te: 'అభ్యర్థనలు', kn: 'ವಿನಂತಿಗಳು', ml: 'അഭ്യർത്ഥനകൾ', mr: 'विनंत्या', gu: 'વિનંતીઓ', pa: 'ਬੇਨਤੀਆਂ' },
+  tabConnections: { en: 'Connections', hi: 'जुड़े लोग', bn: 'সংযোগ', ta: 'இணைப்புகள்', te: 'కనెక్షన్లు', kn: 'ಸಂಪರ್ಕಗಳು', ml: 'ബന്ധങ്ങൾ', mr: 'जोडलेले', gu: 'જોડાણો', pa: 'ਜੁੜੇ ਲੋਕ' },
+  connectAction: { en: 'Connect', hi: 'जुड़ें', bn: 'যুক্ত হোন', ta: 'இணை', te: 'కనెక్ట్', kn: 'ಸಂಪರ್ಕಿಸಿ', ml: 'ബന്ധപ്പെടുക', mr: 'जोडा', gu: 'જોડાઓ', pa: 'ਜੁੜੋ' },
+  requestSent: { en: 'Request sent', hi: 'अनुरोध भेजा', bn: 'অনুরোধ পাঠানো হয়েছে', ta: 'கோரிக்கை அனுப்பப்பட்டது', te: 'అభ్యర్థన పంపబడింది', kn: 'ವಿನಂತಿ ಕಳುಹಿಸಲಾಗಿದೆ', ml: 'അഭ്യർത്ഥന അയച്ചു', mr: 'विनंती पाठवली', gu: 'વિનંતી મોકલી', pa: 'ਬੇਨਤੀ ਭੇਜੀ' },
+  connectedLabel: { en: 'Connected', hi: 'जुड़े हुए', bn: 'যুক্ত', ta: 'இணைக்கப்பட்டது', te: 'కనెక్ట్ అయ్యారు', kn: 'ಸಂಪರ್ಕಿತ', ml: 'ബന്ധപ്പെട്ടു', mr: 'जोडलेले', gu: 'જોડાયેલા', pa: 'ਜੁੜੇ ਹੋਏ' },
+  removeConnection: { en: 'Remove', hi: 'हटाएँ', bn: 'সরান', ta: 'நீக்கு', te: 'తీసివేయి', kn: 'ತೆಗೆದುಹಾಕಿ', ml: 'നീക്കുക', mr: 'काढा', gu: 'દૂર કરો', pa: 'ਹਟਾਓ' },
+  noPeopleTitle: { en: 'Nobody to show yet', hi: 'दिखाने को अभी कोई नहीं', bn: 'দেখানোর মতো এখনও কেউ নেই', ta: 'காட்ட இன்னும் யாரும் இல்லை', te: 'చూపించడానికి ఇంకా ఎవరూ లేరు', kn: 'ತೋರಿಸಲು ಇನ್ನೂ ಯಾರೂ ಇಲ್ಲ', ml: 'കാണിക്കാൻ ഇതുവരെ ആരുമില്ല', mr: 'दाखवायला अजून कोणी नाही', gu: 'બતાવવા હજી કોઈ નથી', pa: 'ਦਿਖਾਉਣ ਲਈ ਅਜੇ ਕੋਈ ਨਹੀਂ' },
+  noPeopleBody: { en: 'As people join, they appear here.', hi: 'जैसे-जैसे लोग जुड़ेंगे, यहाँ दिखेंगे।', bn: 'লোকজন যোগ দিলে এখানে দেখা যাবে।', ta: 'மக்கள் சேரும்போது இங்கே தோன்றுவார்கள்.', te: 'ప్రజలు చేరినప్పుడు ఇక్కడ కనిపిస్తారు.', kn: 'ಜನರು ಸೇರಿದಂತೆ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತಾರೆ.', ml: 'ആളുകൾ ചേരുമ്പോൾ ഇവിടെ കാണാം.', mr: 'लोक सामील होतील तसे इथे दिसतील.', gu: 'લોકો જોડાશે તેમ અહીં દેખાશે.', pa: 'ਜਿਵੇਂ ਲੋਕ ਜੁੜਨਗੇ, ਇੱਥੇ ਦਿਸਣਗੇ।' },
+  noRequestsTitle: { en: 'No requests waiting', hi: 'कोई अनुरोध लंबित नहीं', bn: 'কোনো অনুরোধ অপেক্ষমাণ নেই', ta: 'நிலுவையில் கோரிக்கை இல்லை', te: 'పెండింగ్ అభ్యర్థనలు లేవు', kn: 'ಬಾಕಿ ವಿನಂತಿಗಳಿಲ್ಲ', ml: 'കാത്തിരിക്കുന്ന അഭ്യർത്ഥനകളില്ല', mr: 'प्रलंबित विनंत्या नाहीत', gu: 'બાકી વિનંતીઓ નથી', pa: 'ਕੋਈ ਬਕਾਇਆ ਬੇਨਤੀ ਨਹੀਂ' },
+  noRequestsBody: { en: 'When someone asks to connect, you will answer it here.', hi: 'जब कोई जुड़ना चाहेगा, आप यहीं जवाब देंगे।', bn: 'কেউ যুক্ত হতে চাইলে এখানেই উত্তর দেবেন।', ta: 'யாராவது இணையக் கேட்டால், இங்கே பதிலளிப்பீர்கள்.', te: 'ఎవరైనా కనెక్ట్ కావాలని అడిగితే ఇక్కడే సమాధానం ఇస్తారు.', kn: 'ಯಾರಾದರೂ ಸಂಪರ್ಕ ಕೇಳಿದರೆ ಇಲ್ಲೇ ಉತ್ತರಿಸುತ್ತೀರಿ.', ml: 'ആരെങ്കിലും ബന്ധപ്പെടാൻ ചോദിച്ചാൽ ഇവിടെ മറുപടി നൽകാം.', mr: 'कोणी जोडू इच्छित असेल तर इथेच उत्तर द्याल.', gu: 'કોઈ જોડાવા માગે તો અહીં જ જવાબ આપશો.', pa: 'ਜਦੋਂ ਕੋਈ ਜੁੜਨਾ ਚਾਹੇਗਾ, ਤੁਸੀਂ ਇੱਥੇ ਜਵਾਬ ਦਿਓਗੇ।' },
+  filterEveryone: { en: 'Everyone', hi: 'सभी', bn: 'সবাই', ta: 'அனைவரும்', te: 'అందరూ', kn: 'ಎಲ್ಲರೂ', ml: 'എല്ലാവരും', mr: 'सर्वजण', gu: 'બધા', pa: 'ਸਾਰੇ' },
+  filterWorkers: { en: 'Workers', hi: 'कामगार', bn: 'কর্মী', ta: 'தொழிலாளர்கள்', te: 'కార్మికులు', kn: 'ಕಾರ್ಮಿಕರು', ml: 'തൊഴിലാളികൾ', mr: 'कामगार', gu: 'કામદારો', pa: 'ਕਾਮੇ' },
+  filterEmployers: { en: 'Employers', hi: 'नियोक्ता', bn: 'নিয়োগকর্তা', ta: 'முதலாளிகள்', te: 'యజమానులు', kn: 'ಮಾಲೀಕರು', ml: 'തൊഴിലുടമകൾ', mr: 'मालक', gu: 'માલિકો', pa: 'ਮਾਲਕ' },
+
+  /* ----------------------------------------------------------- profile */
+  editProfile: { en: 'Edit profile', hi: 'प्रोफ़ाइल संपादित करें', bn: 'প্রোফাইল সম্পাদনা', ta: 'சுயவிவரத்தைத் திருத்து', te: 'ప్రొఫైల్ సవరించు', kn: 'ಪ್ರೊಫೈಲ್ ಸಂಪಾದಿಸಿ', ml: 'പ്രൊഫൈൽ തിരുത്തുക', mr: 'प्रोफाइल संपादित करा', gu: 'પ્રોફાઇલ સંપાદિત કરો', pa: 'ਪਰੋਫਾਈਲ ਸੋਧੋ' },
+  bioLabel: { en: 'About you', hi: 'आपके बारे में', bn: 'আপনার সম্পর্কে', ta: 'உங்களைப் பற்றி', te: 'మీ గురించి', kn: 'ನಿಮ್ಮ ಬಗ್ಗೆ', ml: 'നിങ്ങളെക്കുറിച്ച്', mr: 'तुमच्याबद्दल', gu: 'તમારા વિશે', pa: 'ਤੁਹਾਡੇ ਬਾਰੇ' },
+  bioPlaceholder: { en: 'What you do, how long you have done it, what you are good at.', hi: 'आप क्या करते हैं, कब से करते हैं, किसमें अच्छे हैं।', bn: 'আপনি কী করেন, কত দিন ধরে, কিসে ভালো।', ta: 'நீங்கள் என்ன செய்கிறீர்கள், எவ்வளவு காலமாக, எதில் திறமையானவர்.', te: 'మీరు ఏమి చేస్తారు, ఎంతకాలంగా, దేనిలో మంచివారు.', kn: 'ನೀವು ಏನು ಮಾಡುತ್ತೀರಿ, ಎಷ್ಟು ಕಾಲದಿಂದ, ಯಾವುದರಲ್ಲಿ ನಿಪುಣರು.', ml: 'നിങ്ങൾ എന്ത് ചെയ്യുന്നു, എത്ര കാലമായി, എന്തിൽ മിടുക്കൻ.', mr: 'तुम्ही काय करता, किती काळापासून, कशात चांगले आहात.', gu: 'તમે શું કરો છો, ક્યારથી, કઈ બાબતમાં સારા છો.', pa: 'ਤੁਸੀਂ ਕੀ ਕਰਦੇ ਹੋ, ਕਿੰਨੇ ਸਮੇਂ ਤੋਂ, ਕਿਸ ਵਿੱਚ ਚੰਗੇ ਹੋ।' },
+  skillsLabel: { en: 'What you do', hi: 'आप क्या काम करते हैं', bn: 'আপনি কী কাজ করেন', ta: 'நீங்கள் செய்யும் வேலை', te: 'మీరు చేసే పని', kn: 'ನೀವು ಮಾಡುವ ಕೆಲಸ', ml: 'നിങ്ങൾ ചെയ്യുന്ന ജോലി', mr: 'तुम्ही करत असलेले काम', gu: 'તમે કરતા કામ', pa: 'ਤੁਹਾਡਾ ਕੰਮ' },
+  rateLabel: { en: 'Your usual rate', hi: 'आपका सामान्य दाम', bn: 'আপনার স্বাভাবিক দর', ta: 'உங்கள் வழக்கமான கட்டணம்', te: 'మీ సాధారణ రేటు', kn: 'ನಿಮ್ಮ ಸಾಮಾನ್ಯ ದರ', ml: 'നിങ്ങളുടെ പതിവ് നിരക്ക്', mr: 'तुमचा नेहमीचा दर', gu: 'તમારો સામાન્ય દર', pa: 'ਤੁਹਾਡਾ ਆਮ ਰੇਟ' },
+  usernameLabel: { en: 'Username', hi: 'उपयोगकर्ता नाम', bn: 'ব্যবহারকারীর নাম', ta: 'பயனர்பெயர்', te: 'యూజర్‌నేమ్', kn: 'ಬಳಕೆದಾರ ಹೆಸರು', ml: 'ഉപയോക്തൃനാമം', mr: 'वापरकर्तानाव', gu: 'વપરાશકર્તા નામ', pa: 'ਵਰਤੋਂਕਾਰ ਨਾਮ' },
+  memberSince: { en: 'Member since', hi: 'सदस्य कब से', bn: 'সদস্য যেদিন থেকে', ta: 'உறுப்பினர் ஆனது', te: 'సభ్యులైనది', kn: 'ಸದಸ್ಯರಾದದ್ದು', ml: 'അംഗമായത്', mr: 'सदस्य कधीपासून', gu: 'સભ્ય ક્યારથી', pa: 'ਮੈਂਬਰ ਕਦੋਂ ਤੋਂ' },
+  verifiedLabel: { en: 'Verified', hi: 'सत्यापित', bn: 'যাচাইকৃত', ta: 'சரிபார்க்கப்பட்டது', te: 'ధృవీకరించారు', kn: 'ಪರಿಶೀಲಿತ', ml: 'സ്ഥിരീകരിച്ചു', mr: 'सत्यापित', gu: 'ચકાસાયેલ', pa: 'ਤਸਦੀਕਸ਼ੁਦਾ' },
+  theirPosts: { en: 'Posts', hi: 'पोस्ट', bn: 'পোস্ট', ta: 'இடுகைகள்', te: 'పోస్టులు', kn: 'ಪೋಸ್ಟ್‌ಗಳು', ml: 'പോസ്റ്റുകൾ', mr: 'पोस्ट', gu: 'પોસ્ટ', pa: 'ਪੋਸਟਾਂ' },
+  noPostsTitle: { en: 'No posts yet', hi: 'अभी कोई पोस्ट नहीं', bn: 'এখনও কোনো পোস্ট নেই', ta: 'இன்னும் இடுகைகள் இல்லை', te: 'ఇంకా పోస్టులు లేవు', kn: 'ಇನ್ನೂ ಪೋಸ್ಟ್‌ಗಳಿಲ್ಲ', ml: 'ഇതുവരെ പോസ്റ്റുകളില്ല', mr: 'अजून पोस्ट नाहीत', gu: 'હજી પોસ્ટ નથી', pa: 'ਅਜੇ ਕੋਈ ਪੋਸਟ ਨਹੀਂ' },
+  noPostsBody: { en: 'Nothing has been posted from this account.', hi: 'इस खाते से कुछ पोस्ट नहीं हुआ है।', bn: 'এই অ্যাকাউন্ট থেকে কিছু পোস্ট হয়নি।', ta: 'இந்தக் கணக்கிலிருந்து எதுவும் இடப்படவில்லை.', te: 'ఈ ఖాతా నుంచి ఏమీ పోస్ట్ కాలేదు.', kn: 'ಈ ಖಾತೆಯಿಂದ ಏನೂ ಪೋಸ್ಟ್ ಆಗಿಲ್ಲ.', ml: 'ഈ അക്കൗണ്ടിൽ നിന്ന് ഒന്നും പോസ്റ്റ് ചെയ്തിട്ടില്ല.', mr: 'या खात्यातून काहीही पोस्ट झालेले नाही.', gu: 'આ ખાતામાંથી કંઈ પોસ્ટ થયું નથી.', pa: 'ਇਸ ਖਾਤੇ ਤੋਂ ਕੁਝ ਪੋਸਟ ਨਹੀਂ ਹੋਇਆ।' },
+  offerWork: { en: 'Offer work', hi: 'काम का प्रस्ताव दें', bn: 'কাজের প্রস্তাব দিন', ta: 'வேலை வழங்கு', te: 'పని ఇవ్వండి', kn: 'ಕೆಲಸ ನೀಡಿ', ml: 'ജോലി വാഗ്ദാനം ചെയ്യുക', mr: 'काम देऊ करा', gu: 'કામ ઓફર કરો', pa: 'ਕੰਮ ਪੇਸ਼ ਕਰੋ' },
+  accountRole: { en: 'Account type', hi: 'खाता प्रकार', bn: 'অ্যাকাউন্টের ধরন', ta: 'கணக்கு வகை', te: 'ఖాతా రకం', kn: 'ಖಾತೆ ಪ್ರಕಾರ', ml: 'അക്കൗണ്ട് തരം', mr: 'खाते प्रकार', gu: 'ખાતાનો પ્રકાર', pa: 'ਖਾਤਾ ਕਿਸਮ' },
+  roleImmutable: { en: 'Set at sign-up and locked by the database. It cannot be changed from here.', hi: 'साइन अप पर तय, डेटाबेस में लॉक। यहाँ से बदला नहीं जा सकता।', bn: 'সাইন আপে নির্ধারিত, ডেটাবেসে লক করা। এখান থেকে বদলানো যায় না।', ta: 'பதிவின்போது நிர்ணயிக்கப்பட்டு தரவுத்தளத்தில் பூட்டப்பட்டது. இங்கிருந்து மாற்ற முடியாது.', te: 'సైన్ అప్‌లో నిర్ణయించి డేటాబేస్‌లో లాక్ చేయబడింది. ఇక్కడి నుంచి మార్చలేరు.', kn: 'ಸೈನ್ ಅಪ್‌ನಲ್ಲಿ ನಿಗದಿಯಾಗಿ ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಲಾಕ್ ಆಗಿದೆ. ಇಲ್ಲಿಂದ ಬದಲಿಸಲಾಗದು.', ml: 'സൈൻ അപ്പിൽ നിശ്ചയിച്ച് ഡാറ്റാബേസിൽ പൂട്ടിയിരിക്കുന്നു. ഇവിടെനിന്ന് മാറ്റാനാവില്ല.', mr: 'साइन अपला ठरवले आणि डेटाबेसमध्ये लॉक केले. इथून बदलता येत नाही.', gu: 'સાઇન અપ વખતે નક્કી અને ડેટાબેઝમાં લોક. અહીંથી બદલી શકાતું નથી.', pa: 'ਸਾਈਨ ਅੱਪ ਵੇਲੇ ਤੈਅ ਅਤੇ ਡਾਟਾਬੇਸ ਵਿੱਚ ਲਾਕ। ਇੱਥੋਂ ਬਦਲਿਆ ਨਹੀਂ ਜਾ ਸਕਦਾ।' },
+
+  /* ---------------------------------------------------------- earnings */
+  earningsTitle: { en: 'Earnings', hi: 'कमाई', bn: 'আয়', ta: 'வருவாய்', te: 'సంపాదన', kn: 'ಗಳಿಕೆ', ml: 'വരുമാനം', mr: 'कमाई', gu: 'કમાણી', pa: 'ਕਮਾਈ' },
+  earningsSub: { en: 'Every accepted offer, added up. Nothing here is estimated.', hi: 'हर स्वीकृत प्रस्ताव का जोड़। यहाँ कुछ भी अनुमानित नहीं है।', bn: 'প্রতিটি গৃহীত প্রস্তাবের যোগফল। এখানে কিছুই আন্দাজ নয়।', ta: 'ஏற்கப்பட்ட ஒவ்வொரு சலுகையின் கூட்டுத்தொகை. இங்கு எதுவும் மதிப்பீடு அல்ல.', te: 'ఆమోదించిన ప్రతి ఆఫర్ మొత్తం. ఇక్కడ ఏదీ అంచనా కాదు.', kn: 'ಒಪ್ಪಿದ ಪ್ರತಿ ಪ್ರಸ್ತಾಪದ ಮೊತ್ತ. ಇಲ್ಲಿ ಏನೂ ಅಂದಾಜು ಅಲ್ಲ.', ml: 'സ്വീകരിച്ച ഓരോ ഓഫറിന്റെയും ആകെത്തുക. ഇവിടെ ഒന്നും ഊഹമല്ല.', mr: 'स्वीकारलेल्या प्रत्येक प्रस्तावाची बेरीज. इथे काहीही अंदाजे नाही.', gu: 'સ્વીકારાયેલા દરેક પ્રસ્તાવનો સરવાળો. અહીં કંઈ અંદાજિત નથી.', pa: 'ਮੰਨੀ ਹੋਈ ਹਰ ਪੇਸ਼ਕਸ਼ ਦਾ ਜੋੜ। ਇੱਥੇ ਕੁਝ ਵੀ ਅੰਦਾਜ਼ਨ ਨਹੀਂ।' },
+  lifetimeLabel: { en: 'Lifetime', hi: 'कुल', bn: 'মোট', ta: 'மொத்தம்', te: 'మొత్తం', kn: 'ಒಟ್ಟು', ml: 'ആകെ', mr: 'एकूण', gu: 'કુલ', pa: 'ਕੁੱਲ' },
+  jobsDone: { en: 'Jobs done', hi: 'पूरे किए काम', bn: 'সম্পন্ন কাজ', ta: 'முடிந்த வேலைகள்', te: 'పూర్తయిన పనులు', kn: 'ಮುಗಿದ ಕೆಲಸಗಳು', ml: 'ചെയ്ത ജോലികൾ', mr: 'पूर्ण कामे', gu: 'પૂરાં કામ', pa: 'ਪੂਰੇ ਕੀਤੇ ਕੰਮ' },
+  averageJob: { en: 'Average', hi: 'औसत', bn: 'গড়', ta: 'சராசரி', te: 'సగటు', kn: 'ಸರಾಸರಿ', ml: 'ശരാശരി', mr: 'सरासरी', gu: 'સરેરાશ', pa: 'ਔਸਤ' },
+  bestJob: { en: 'Best single job', hi: 'सबसे बड़ा काम', bn: 'সবচেয়ে বড় কাজ', ta: 'மிகப்பெரிய வேலை', te: 'అతిపెద్ద పని', kn: 'ಅತಿ ದೊಡ್ಡ ಕೆಲಸ', ml: 'ഏറ്റവും വലിയ ജോലി', mr: 'सर्वात मोठे काम', gu: 'સૌથી મોટું કામ', pa: 'ਸਭ ਤੋਂ ਵੱਡਾ ਕੰਮ' },
+  thisMonth: { en: 'This month', hi: 'इस महीने', bn: 'এই মাসে', ta: 'இந்த மாதம்', te: 'ఈ నెల', kn: 'ಈ ತಿಂಗಳು', ml: 'ഈ മാസം', mr: 'या महिन्यात', gu: 'આ મહિને', pa: 'ਇਸ ਮਹੀਨੇ' },
+  lastSixMonths: { en: 'Last six months', hi: 'पिछले छह महीने', bn: 'গত ছয় মাস', ta: 'கடந்த ஆறு மாதங்கள்', te: 'గత ఆరు నెలలు', kn: 'ಕಳೆದ ಆರು ತಿಂಗಳು', ml: 'കഴിഞ്ഞ ആറ് മാസം', mr: 'गेले सहा महिने', gu: 'છેલ્લા છ મહિના', pa: 'ਪਿਛਲੇ ਛੇ ਮਹੀਨੇ' },
+  noEarningsTitle: { en: 'Nothing earned yet', hi: 'अभी कोई कमाई नहीं', bn: 'এখনও কোনো আয় নেই', ta: 'இன்னும் வருவாய் இல்லை', te: 'ఇంకా సంపాదన లేదు', kn: 'ಇನ್ನೂ ಗಳಿಕೆ ಇಲ್ಲ', ml: 'ഇതുവരെ വരുമാനമില്ല', mr: 'अजून कमाई नाही', gu: 'હજી કમાણી નથી', pa: 'ਅਜੇ ਕੋਈ ਕਮਾਈ ਨਹੀਂ' },
+  noEarningsBody: { en: 'Accept an offer and it will be counted here.', hi: 'कोई प्रस्ताव स्वीकार करें, वह यहाँ जुड़ जाएगा।', bn: 'কোনো প্রস্তাব গ্রহণ করলে তা এখানে যোগ হবে।', ta: 'ஒரு சலுகையை ஏற்றால் அது இங்கே சேர்க்கப்படும்.', te: 'ఒక ఆఫర్ అంగీకరిస్తే అది ఇక్కడ లెక్కించబడుతుంది.', kn: 'ಒಂದು ಪ್ರಸ್ತಾಪ ಒಪ್ಪಿದರೆ ಅದು ಇಲ್ಲಿ ಸೇರುತ್ತದೆ.', ml: 'ഒരു ഓഫർ സ്വീകരിച്ചാൽ അത് ഇവിടെ ചേരും.', mr: 'एखादा प्रस्ताव स्वीकारला की तो इथे मोजला जाईल.', gu: 'કોઈ પ્રસ્તાવ સ્વીકારશો તો તે અહીં ગણાશે.', pa: 'ਕੋਈ ਪੇਸ਼ਕਸ਼ ਮੰਨੋ, ਉਹ ਇੱਥੇ ਗਿਣੀ ਜਾਵੇਗੀ।' },
+  workersOnly: { en: 'Earnings are for worker accounts.', hi: 'कमाई कामगार खातों के लिए है।', bn: 'আয় কর্মী অ্যাকাউন্টের জন্য।', ta: 'வருவாய் தொழிலாளர் கணக்குகளுக்கானது.', te: 'సంపాదన కార్మిక ఖాతాలకు మాత్రమే.', kn: 'ಗಳಿಕೆ ಕಾರ್ಮಿಕ ಖಾತೆಗಳಿಗಾಗಿ.', ml: 'വരുമാനം തൊഴിലാളി അക്കൗണ്ടുകൾക്കാണ്.', mr: 'कमाई कामगार खात्यांसाठी आहे.', gu: 'કમાણી કામદાર ખાતાં માટે છે.', pa: 'ਕਮਾਈ ਕਾਮਾ ਖਾਤਿਆਂ ਲਈ ਹੈ।' },
+
+  /* ------------------------------------------------------------- setup */
+  setupTitle: { en: 'Supabase is not connected yet', hi: 'Supabase अभी जुड़ा नहीं है', bn: 'Supabase এখনও যুক্ত নয়', ta: 'Supabase இன்னும் இணைக்கப்படவில்லை', te: 'Supabase ఇంకా కనెక్ట్ కాలేదు', kn: 'Supabase ಇನ್ನೂ ಸಂಪರ್ಕವಾಗಿಲ್ಲ', ml: 'Supabase ഇതുവരെ ബന്ധിപ്പിച്ചിട്ടില്ല', mr: 'Supabase अजून जोडलेले नाही', gu: 'Supabase હજી જોડાયું નથી', pa: 'Supabase ਅਜੇ ਜੁੜਿਆ ਨਹੀਂ' },
+  setupBody: { en: 'Add the two NEXT_PUBLIC_SUPABASE values to .env.local and restart the dev server. The README has the exact commands.', hi: '.env.local में दो NEXT_PUBLIC_SUPABASE मान डालें और dev सर्वर फिर से चलाएँ। README में सटीक कमांड हैं।', bn: '.env.local-এ দুটি NEXT_PUBLIC_SUPABASE মান দিন এবং dev সার্ভার পুনরায় চালু করুন। README-তে সঠিক কমান্ড আছে।', ta: '.env.local இல் இரண்டு NEXT_PUBLIC_SUPABASE மதிப்புகளைச் சேர்த்து dev சர்வரை மறுதொடக்கம் செய்யவும். README இல் சரியான கட்டளைகள் உள்ளன.', te: '.env.local లో రెండు NEXT_PUBLIC_SUPABASE విలువలు చేర్చి dev సర్వర్ పునఃప్రారంభించండి. README లో ఖచ్చితమైన కమాండ్లు ఉన్నాయి.', kn: '.env.local ನಲ್ಲಿ ಎರಡು NEXT_PUBLIC_SUPABASE ಮೌಲ್ಯ ಸೇರಿಸಿ dev ಸರ್ವರ್ ಮರುಪ್ರಾರಂಭಿಸಿ. README ನಲ್ಲಿ ನಿಖರ ಆದೇಶಗಳಿವೆ.', ml: '.env.local ൽ രണ്ട് NEXT_PUBLIC_SUPABASE മൂല്യങ്ങൾ ചേർത്ത് dev സെർവർ പുനരാരംഭിക്കുക. README ൽ കൃത്യമായ കമാൻഡുകളുണ്ട്.', mr: '.env.local मध्ये दोन NEXT_PUBLIC_SUPABASE मूल्ये टाका आणि dev सर्व्हर पुन्हा सुरू करा. README मध्ये नेमक्या आज्ञा आहेत.', gu: '.env.local માં બે NEXT_PUBLIC_SUPABASE મૂલ્યો ઉમેરો અને dev સર્વર ફરી શરૂ કરો. README માં ચોક્કસ આદેશો છે.', pa: '.env.local ਵਿੱਚ ਦੋ NEXT_PUBLIC_SUPABASE ਮੁੱਲ ਪਾਓ ਅਤੇ dev ਸਰਵਰ ਮੁੜ ਚਾਲੂ ਕਰੋ। README ਵਿੱਚ ਸਹੀ ਕਮਾਂਡਾਂ ਹਨ।' },
+  signInToContinue: { en: 'Sign in to continue', hi: 'जारी रखने के लिए साइन इन करें', bn: 'চালিয়ে যেতে সাইন ইন করুন', ta: 'தொடர உள்நுழையவும்', te: 'కొనసాగించడానికి సైన్ ఇన్ చేయండి', kn: 'ಮುಂದುವರಿಯಲು ಸೈನ್ ಇನ್ ಮಾಡಿ', ml: 'തുടരാൻ സൈൻ ഇൻ ചെയ്യുക', mr: 'सुरू ठेवण्यासाठी साइन इन करा', gu: 'ચાલુ રાખવા સાઇન ઇન કરો', pa: 'ਜਾਰੀ ਰੱਖਣ ਲਈ ਸਾਈਨ ਇਨ ਕਰੋ' },
+
+  /* -------------------------------------------------------- categories */
+  cat_electrical: { en: 'Electrical', hi: 'बिजली', bn: 'বিদ্যুৎ', ta: 'மின்சாரம்', te: 'విద్యుత్', kn: 'ವಿದ್ಯುತ್', ml: 'ഇലക്ട്രിക്കൽ', mr: 'वीज', gu: 'વીજળી', pa: 'ਬਿਜਲੀ' },
+  cat_plumbing: { en: 'Plumbing', hi: 'नलसाज़ी', bn: 'নলকাজ', ta: 'குழாய் பணி', te: 'ప్లంబింగ్', kn: 'ಕೊಳಾಯಿ', ml: 'പ്ലംബിംഗ്', mr: 'नळजोडणी', gu: 'પ્લમ્બિંગ', pa: 'ਪਲੰਬਿੰਗ' },
+  cat_carpentry: { en: 'Carpentry', hi: 'बढ़ईगीरी', bn: 'কাঠের কাজ', ta: 'தச்சு வேலை', te: 'వడ్రంగి', kn: 'ಬಡಗಿತನ', ml: 'ആശാരിപ്പണി', mr: 'सुतारकाम', gu: 'સુથારીકામ', pa: 'ਤਰਖਾਣੀ' },
+  cat_painting: { en: 'Painting', hi: 'रंगाई-पुताई', bn: 'রঙের কাজ', ta: 'வண்ணம் பூசுதல்', te: 'పెయింటింగ్', kn: 'ಬಣ್ಣ ಬಳಿಯುವುದು', ml: 'പെയിന്റിംഗ്', mr: 'रंगकाम', gu: 'રંગકામ', pa: 'ਰੰਗ-ਰੋਗਨ' },
+  cat_cleaning: { en: 'Cleaning', hi: 'सफ़ाई', bn: 'পরিষ্কার', ta: 'சுத்தம்', te: 'శుభ్రత', kn: 'ಸ್ವಚ್ಛತೆ', ml: 'ശുചീകരണം', mr: 'साफसफाई', gu: 'સફાઈ', pa: 'ਸਫ਼ਾਈ' },
+  cat_cooking: { en: 'Cooking', hi: 'खाना बनाना', bn: 'রান্না', ta: 'சமையல்', te: 'వంట', kn: 'ಅಡುಗೆ', ml: 'പാചകം', mr: 'स्वयंपाक', gu: 'રસોઈ', pa: 'ਖਾਣਾ ਬਣਾਉਣਾ' },
+  cat_driving: { en: 'Driving', hi: 'ड्राइविंग', bn: 'গাড়ি চালানো', ta: 'ஓட்டுநர் பணி', te: 'డ్రైవింగ్', kn: 'ಚಾಲನೆ', ml: 'ഡ്രൈവിംഗ്', mr: 'वाहन चालवणे', gu: 'ડ્રાઇવિંગ', pa: 'ਡਰਾਈਵਿੰਗ' },
+  cat_gardening: { en: 'Gardening', hi: 'बागवानी', bn: 'বাগান', ta: 'தோட்டவேலை', te: 'తోటపని', kn: 'ತೋಟಗಾರಿಕೆ', ml: 'തോട്ടപ്പണി', mr: 'बागकाम', gu: 'બાગકામ', pa: 'ਬਾਗਬਾਨੀ' },
+  cat_appliance: { en: 'Appliance repair', hi: 'उपकरण मरम्मत', bn: 'যন্ত্র মেরামত', ta: 'சாதன பழுதுபார்ப்பு', te: 'ఉపకరణాల మరమ్మతు', kn: 'ಉಪಕರಣ ದುರಸ್ತಿ', ml: 'ഉപകരണ അറ്റകുറ്റപ്പണി', mr: 'उपकरण दुरुस्ती', gu: 'ઉપકરણ સમારકામ', pa: 'ਉਪਕਰਣ ਮੁਰੰਮਤ' },
+  cat_tailoring: { en: 'Tailoring', hi: 'सिलाई', bn: 'দর্জির কাজ', ta: 'தையல்', te: 'కుట్టుపని', kn: 'ಹೊಲಿಗೆ', ml: 'തയ്യൽ', mr: 'शिवणकाम', gu: 'સિલાઈ', pa: 'ਸਿਲਾਈ' },
+  cat_moving: { en: 'Moving and loading', hi: 'सामान ढुलाई', bn: 'মালপত্র সরানো', ta: 'சாமான் மாற்றம்', te: 'సామాను తరలింపు', kn: 'ಸಾಮಾನು ಸಾಗಣೆ', ml: 'സാധനം മാറ്റൽ', mr: 'सामान वाहतूक', gu: 'સામાન ખસેડવું', pa: 'ਸਾਮਾਨ ਢੋਆ-ਢੁਆਈ' },
+  cat_security: { en: 'Security', hi: 'सुरक्षा', bn: 'নিরাপত্তা', ta: 'பாதுகாப்பு', te: 'భద్రత', kn: 'ಭದ್ರತೆ', ml: 'സുരക്ഷ', mr: 'सुरक्षा', gu: 'સુરક્ષા', pa: 'ਸੁਰੱਖਿਆ' },
+  cat_tutoring: { en: 'Tutoring', hi: 'ट्यूशन', bn: 'টিউশন', ta: 'பயிற்சி', te: 'ట్యూషన్', kn: 'ಬೋಧನೆ', ml: 'ട്യൂഷൻ', mr: 'शिकवणी', gu: 'ટ્યુશન', pa: 'ਟਿਊਸ਼ਨ' },
+  cat_beauty: { en: 'Beauty and grooming', hi: 'सौंदर्य सेवा', bn: 'রূপচর্চা', ta: 'அழகு சேவை', te: 'సౌందర్య సేవ', kn: 'ಸೌಂದರ್ಯ ಸೇವೆ', ml: 'സൗന്ദര്യ സേവനം', mr: 'सौंदर्य सेवा', gu: 'સૌંદર્ય સેવા', pa: 'ਸੁੰਦਰਤਾ ਸੇਵਾ' },
+  cat_other: { en: 'Something else', hi: 'कुछ और', bn: 'অন্য কিছু', ta: 'வேறு ஏதாவது', te: 'మరేదైనా', kn: 'ಬೇರೇನಾದರೂ', ml: 'മറ്റെന്തെങ്കിലും', mr: 'दुसरे काही', gu: 'બીજું કંઈક', pa: 'ਕੁਝ ਹੋਰ' },
+} satisfies Record<string, Entry>;
+
+export type TKey = keyof typeof STRINGS;
+
+/** Every key, for the completeness assertions in `npm test`. */
+export const T_KEYS = Object.keys(STRINGS) as TKey[];
+
+export function translate(key: TKey, lang: LangCode): string {
+  const entry = STRINGS[key] as Entry;
+  return entry[lang] || entry.en;
 }
 
-export function langMeta(code: LangCode) {
-  return LANGUAGES.find((l) => l.code === code) ?? LANGUAGES[0];
+/** `cat_electrical` from `electrical`, with a compile-time guarantee it exists. */
+export function categoryKey(id: string): TKey {
+  const key = `cat_${id}` as TKey;
+  return key in STRINGS ? key : 'cat_other';
 }
 
-export function speechLocale(code: LangCode): string {
-  return langMeta(code).speech;
-}
-
-export function langNative(code: LangCode): string {
-  return langMeta(code).native;
-}
-
-/** Used by the self-test to prove no language is missing or untranslated. */
-export const ALL_KEYS = [...Object.keys(en), ...Object.keys(WIDE)] as TKey[];
-export { en as ENGLISH, DICTS };
+export const STORAGE_KEY_LANG = 'lokasetu:lang';
+export const STORAGE_KEY_THEME = 'lokasetu:theme';

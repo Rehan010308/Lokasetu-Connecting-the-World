@@ -12,3 +12,9 @@ yarn-error.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+_legacy
+preview.html
+preview-dark.html
+shot-*.png
+design-preview.tsx
+ssr-check.tsx

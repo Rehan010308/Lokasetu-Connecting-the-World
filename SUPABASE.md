@@ -1,349 +1,276 @@
-# Supabase setup — start to finish
+# Supabase, click by click
 
-Written for someone who has never used Supabase. Every step names the exact
-page, the exact button, and the exact text to paste. Roughly 20 minutes.
+Written for someone who has not administered Supabase before. Every step names
+the exact page, the exact button and the exact text to paste. About fifteen
+minutes.
 
-**Before you start, know this:** the app works *without* Supabase. If you skip
-this entire document, LokaSetu still runs exactly as it does today, storing data
-in each browser. Supabase is what makes data **shared across users and devices**.
-If anything here goes wrong, [rolling back](#18-rollback) is deleting two
-environment variables.
+Your four tables — `profiles`, `posts`, `connections`, `offers` — already exist.
+Nothing here drops or recreates them.
 
 ---
 
-## 1. Create the account and project
+## 1. Run the schema
 
-1. Go to **https://supabase.com** → **Start your project** → sign in with GitHub.
-2. On the dashboard, click **New project**.
-3. Fill in:
-   - **Name:** `lokasetu`
-   - **Database Password:** click **Generate a password**, then **copy it into a
-     text file and save it.** You will not be shown it again. You do not need it
-     for this app, but you need it to ever open the database directly.
-   - **Region:** **South Asia (Mumbai)** — closest to your users, so every query
-     is faster.
-4. **Plan: Free.** It gives 500MB of database, 2GB of bandwidth and 200
-   concurrent realtime connections. That is far beyond a demo or a hackathon.
-   Do not pay for anything.
-5. Click **Create new project** and wait ~2 minutes while it provisions.
+The DDL you ran created the tables. It did **not** switch on Row Level
+Security, and it did not create the trigger that gives each new user a profile
+row. Without both, the app signs someone up and then has a user with nothing
+attached — the single most common way a Supabase app breaks on day one.
 
----
+1. Open <https://supabase.com/dashboard> and click your project.
+2. Left sidebar → **SQL Editor** (the `>_` icon).
+3. Click **+ New query**.
+4. Open `supabase/schema.sql` from this project, select all of it (Ctrl+A),
+   copy.
+5. Paste into the editor.
+6. Click **Run** (bottom right, or Ctrl+Enter).
 
-## 2. Create the tables
-
-1. In the left sidebar click **SQL Editor** (icon looks like `>_`).
-2. Click **+ New query**.
-3. Open `supabase/schema.sql` from this project. Select **all** of it
-   (Ctrl+A) and copy it.
-4. Paste into the SQL editor.
-5. Click **Run** (bottom right, or Ctrl+Enter).
-
-You should see **Success. No rows returned.** That is what success looks like —
+You should see **Success. No rows returned.** That is what success looks like:
 the script creates things, it does not select anything.
 
-**Verify it worked.** In the same editor, run:
+**It is safe to run more than once.** Tables use `CREATE TABLE IF NOT EXISTS`
+with exactly the DDL you already ran, new columns use `ADD COLUMN IF NOT
+EXISTS`, and every policy and trigger is dropped before it is created.
+
+### Check it worked
+
+In the same editor, run this:
 
 ```sql
-select table_name from information_schema.tables
- where table_schema = 'public' order by 1;
+select tablename, rowsecurity
+  from pg_tables
+ where schemaname = 'public'
+ order by 1;
 ```
 
-You must see exactly these nine:
+You must see all four tables with `rowsecurity = true`:
 
 ```
-bookings
-jobs
-messages
-residents
-reviews
-sos_events
-verification_status
-workers
-workers_public
+connections   true
+offers        true
+posts         true
+profiles      true
 ```
 
-If any are missing, the script did not finish — scroll up in the editor for a
-red error, fix it, and run the whole file again. It is safe to re-run.
+If any says `false`, the script did not finish. Scroll up in the editor for a
+red error, fix it, and run the whole file again.
+
+Then check the triggers landed:
+
+```sql
+select trigger_name, event_object_table
+  from information_schema.triggers
+ where trigger_schema in ('public', 'auth')
+ order by 2, 1;
+```
+
+You are looking for `on_auth_user_created` on `users`, `profiles_freeze_role`
+on `profiles`, and `offers_guard_update` on `offers`.
 
 ---
 
-## 3. Turn on Realtime
+## 2. Turn off email confirmation
 
-The SQL in step 2 already added the tables to the realtime publication. Confirm
-it, because this is the single most common reason "realtime isn't working":
+**Do this or the demo accounts will not work.** By default Supabase makes a new
+account confirm its email address before it can sign in. For a demo, that means
+the quick-login button creates an account and then cannot use it.
 
-1. Sidebar → **Database** → **Publications**.
-2. Click **supabase_realtime**.
-3. You should see **jobs, bookings, messages, sos_events, reviews** with their
-   toggles **on**.
-4. If any is off, switch it on.
+1. Sidebar → **Authentication**.
+2. **Sign In / Providers** (older dashboards call this **Providers**).
+3. Click **Email**.
+4. Turn **Confirm email** **off**.
+5. **Save**.
+
+You can turn it back on before real users arrive. Nothing in the app depends on
+it being off except the convenience of instant sign-up.
 
 ---
 
-## 4. Find your keys
+## 3. Find your two keys
 
 1. Sidebar → **Project Settings** (gear icon, bottom left) → **API**.
 2. You need two values from this page:
 
-| Field on the page | What it is | Safe in the browser? |
+| Field on the page | What it is | Safe in a browser? |
 |---|---|---|
 | **Project URL** | `https://xxxxx.supabase.co` | Yes |
-| **Project API keys → `anon` `public`** | a long `eyJ...` string | **Yes** — it is designed to be public and is limited by Row Level Security |
-| **Project API keys → `service_role` `secret`** | another long string | **NO. NEVER.** |
+| **Project API keys → `anon` `public`** | a long `eyJ…` string | **Yes** — designed to be public, and limited by Row Level Security |
+| **Project API keys → `service_role` `secret`** | another long `eyJ…` string | **NO. NEVER.** |
 
-**The service_role key bypasses Row Level Security completely.** Anyone who has
-it can read and delete your entire database. This app never uses it, it is not
-in any file here, and you must never paste it into your code, into Vercel's
-`NEXT_PUBLIC_*` variables, or into a chat window. If you ever do by accident,
-click **Reset** next to it on that page immediately.
+**The `service_role` key bypasses Row Level Security completely.** Anyone
+holding it can read and delete your entire database. This app never uses it, it
+appears in no file here, and it must never be pasted into your code, into a
+`NEXT_PUBLIC_*` variable, or into a chat window. If you ever paste it somewhere
+by accident, click **Reset** next to it on that page immediately.
 
 ---
 
-## 5. Local environment file
+## 4. Local environment file
 
-In the project root (next to `package.json`), create a file called exactly
+In the project root, next to `package.json`, create a file called exactly
 **`.env.local`**:
 
-```bash
+```
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9....
 ```
 
-Replace both values with yours from step 4. No quotes, no spaces around `=`.
-
-`.env.local` is already in `.gitignore`, so it will never be committed. Confirm
-with `git status` — if `.env.local` appears in the list, stop and tell me.
-
----
-
-## 6. Install the package
+No quotes, no spaces around `=`. Then:
 
 ```powershell
-npm install @supabase/supabase-js
-```
-
-That is the only new dependency.
-
----
-
-## 7. Run it locally
-
-```powershell
+npm install
 npm run dev
 ```
 
-Open http://localhost:3000. Then open the browser console (F12).
-
-- **Nothing about Supabase in the console** → connected. Data is now shared.
-- **`[supabase] fetchAll — ...`** → connected but a query failed. The message
-  names the problem; the app has fallen back to local data and still works.
+Environment variables are read when the dev server starts. If you edit
+`.env.local` while it is running, stop it (Ctrl+C) and start it again.
 
 ---
 
-## 8. Seed the shared database
+## 5. Confirm realtime is on
 
-Your Supabase tables are empty. The demo data currently lives in each browser.
-To push it up once, so every device sees the same world:
+The schema already added the tables to the realtime publication. Confirm it,
+because this is the single most common reason "realtime isn't working":
 
-1. Sign in to the app as any demo account.
-2. Open the browser console and run:
+1. Sidebar → **Database** → **Publications**.
+2. Click **supabase_realtime**.
+3. `profiles`, `posts`, `connections` and `offers` should all be **on**.
+4. If any is off, switch it on.
 
-```js
-JSON.parse(localStorage.getItem('lokasetu:v2')).db.workers.length
+`schema.sql` also sets `replica identity full` on those tables. Without it,
+realtime fires but the payload is missing the columns the UI needs — the event
+arrives and nothing changes on screen.
+
+---
+
+## 6. Prove it works, with two browsers
+
+The whole point is data shared between people, so test it with two sessions.
+
+### Sign-up creates a profile
+1. Open <http://localhost:3000/login>.
+2. Press **Demo employer**. You should land on the feed with three jobs.
+3. In Supabase → **Table Editor** → **profiles**. There is a row with
+   `username = lokasetu_employer` and `role = employer`.
+
+### A negotiation cannot be gamed
+1. Still as the employer, open **Offers**. There is a ₹900 offer, pending.
+2. The **Accept** button is disabled, and the card says *"You named this price.
+   Waiting for them."* That is not a UI trick — try it from the SQL editor:
+
+```sql
+-- as the employer, accepting their own price
+update public.offers set status = 'accepted' where id = <the id>;
 ```
 
-If that prints a number, your local data is intact.
+   From the SQL editor this succeeds, because the SQL editor runs as the
+   database owner and bypasses RLS. From the app, signed in as the employer, it
+   raises `the side that proposed this price cannot also accept it`.
 
-3. Go to **Profile → Reset demo data**. With Supabase configured, the reseed
-   writes to Supabase rather than only to the browser.
+### Realtime
+1. Open a private window, go to `/login`, press **Demo worker**.
+2. Put the two windows side by side. Worker → **Offers** → **Counter** → 1400.
+3. The employer's screen updates without a refresh.
 
-Alternatively, run `supabase/seed.sql` in the SQL editor for a minimal set of
-demo rows.
+### Earnings are real
+1. As the employer, accept the ₹1,400.
+2. As the worker, open **Earnings**. ₹1,400, one job. That number is the sum of
+   accepted offers and nothing else.
+
+### Count the rows
+```sql
+select
+  (select count(*) from profiles)    as profiles,
+  (select count(*) from posts)       as posts,
+  (select count(*) from connections) as connections,
+  (select count(*) from offers)      as offers;
+```
 
 ---
 
-## 9. Vercel environment variables
+## 7. Vercel
 
-1. Go to **https://vercel.com** → your **Lokasetu** project.
+1. <https://vercel.com> → your **Lokasetu** project.
 2. **Settings** → **Environment Variables**.
 3. Add the first:
    - **Key:** `NEXT_PUBLIC_SUPABASE_URL`
    - **Value:** your project URL
    - **Environments:** tick **Production**, **Preview** and **Development**
    - **Save**
-4. Add the second the same way:
-   - **Key:** `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - **Value:** your anon key
-5. **Deployments** tab → the most recent one → **⋯** → **Redeploy**.
+4. Add `NEXT_PUBLIC_SUPABASE_ANON_KEY` the same way.
+5. **Deployments** → the most recent → **⋯** → **Redeploy**.
 
 **Environment variables only apply to builds that happen after you add them.**
 Adding a variable does not change the running site. You must redeploy. This is
 the most common Vercel mistake.
 
----
-
-## 10. Commands before deploying
-
-```powershell
-npm run verify      # typecheck + 233 assertions
-npm run ssr         # renders every route server-side, as the build does
-npm run build       # the real production build
-```
-
-If all three pass locally, the Vercel build will pass.
+Nothing else in Vercel needs changing — build command, output directory and
+install command all stay on their defaults.
 
 ---
 
-## 11. Vercel settings to change
+## 8. When something is wrong
 
-None. Build command, output directory and install command all stay on their
-defaults. The only change is the two environment variables in step 9.
-
----
-
-## 12. Testing that it actually works
-
-The whole point is data shared **across devices**, so test with two.
-
-### Residents can post jobs
-1. Phone (or a private window) → sign in as **customer** `9000000002`.
-2. Book anything through to **Send Booking Request**.
-3. In Supabase → **Table Editor** → **jobs**. Your job is the top row.
-
-### Workers receive jobs instantly
-1. Laptop → sign in as **worker** `9000000001`.
-2. Leave the job feed open, **do not refresh**.
-3. On the phone, send another booking request in a matching trade.
-4. It appears in the worker's feed within a second or two.
-
-### Booking updates sync instantly
-1. On the worker device, open the job and press **Accept**.
-2. The customer's screen switches to the Contact Hub without a refresh.
-
-### Messages sync instantly
-1. Open the same job on both devices.
-2. Send a message from one. It appears on the other, no refresh.
-
-### Verify the migration overall
-In the SQL editor:
-
-```sql
-select
-  (select count(*) from jobs)     as jobs,
-  (select count(*) from bookings) as bookings,
-  (select count(*) from messages) as messages,
-  (select count(*) from workers)  as workers;
-```
-
-Numbers that grow as you use the app mean the migration is working.
-
----
-
-## 13. Security — what is enforced, and where
-
-Your rules, and the line that enforces each:
-
-| Rule | Where it is enforced |
-|---|---|
-| Never hardcode keys | `lib/supabase/env.ts` reads `process.env` only. No key appears in any source file. |
-| No secret key in the browser | The service_role key is not read anywhere in this codebase. |
-| No plaintext passwords | There are no passwords. Sign-in is phone + OTP. |
-| Role cannot be changed from the frontend | `freeze_role()` trigger on `residents`. The database raises an exception on any attempted change — the UI cannot override it. |
-| Phone numbers not exposed | The app reads `workers_public`, a view with no `phone` column. |
-| Aadhaar: last 4 digits only | `verification_status.id_last4` has `CHECK (id_last4 ~ '^[0-9]{4}$')`. A full number is rejected by the database. |
-| Use environment variables | Both values come from `.env.local` / Vercel. |
-
-**Before real users:** the RLS policies marked `-- DEMO ONLY` in `schema.sql`
-allow anonymous writes, because the app has no real authentication yet. The
-production policy is written directly beneath each one, commented out. Moving to
-Supabase Auth means deleting the demo policy and uncommenting the other. Do not
-launch to the public with the demo policies in place.
-
----
-
-## 14. Common mistakes that break it on Vercel
-
-| Symptom | Cause | Fix |
+| What you see | Why | Fix |
 |---|---|---|
-| Works locally, no shared data on Vercel | Env vars added but not redeployed | Redeploy (step 9.5) |
-| Works locally, not on Vercel, no error | Variable set for Production only | Tick Preview and Development too |
-| `Invalid API key` | Copied the JWT from the wrong row | Use the `anon` `public` key |
-| Realtime never fires | Tables not in the publication | Step 3 |
-| Realtime fires but the UI does not update | `replica identity` not set | Re-run `schema.sql`; it sets this |
-| `permission denied for table` | RLS on with no matching policy | Re-run `schema.sql` |
-| Env var not picked up locally | File named `.env` not `.env.local`, or dev server not restarted | Rename, then restart `npm run dev` |
-| Secrets committed | `.env.local` was force-added | Reset the key in Supabase immediately, then remove the file from git history |
+| "Supabase is not connected yet" banner | The two variables are missing or misspelt | Check `.env.local` spelling exactly, restart `npm run dev` |
+| `The database tables are missing. Run supabase/schema.sql…` | The schema has not been applied to *this* project | Step 1 |
+| `permission denied for table …` | RLS is on with no matching policy | Re-run `schema.sql` — it creates the policies |
+| Sign-up works, then the profile is empty | `on_auth_user_created` is missing | Re-run `schema.sql`; it also backfills existing users |
+| `This account still needs email confirmation` | Confirm email is on | Step 2 |
+| `That email and password do not match an account` | Wrong password, or the account is in a different Supabase project | Check you are pointed at the project you think you are |
+| Realtime never fires | Tables not in the publication | Step 5 |
+| Realtime fires but nothing updates | `replica identity` not set | Re-run `schema.sql` |
+| Works locally, not on Vercel | Variables added but not redeployed | Step 7.5 |
+| Works in production, not in a preview deploy | Variables set for Production only | Tick Preview and Development too |
+| `Invalid API key` | The JWT was copied from the wrong row | Use `anon` `public`, not `service_role` |
+| `.env.local` shows up in `git status` | It was force-added at some point | Reset the key in Supabase immediately, then remove the file from git history |
 
 ---
 
-## 15. What "no Supabase" looks like
+## 9. What the database enforces, and where
 
-If the variables are absent or wrong, `isSupabaseConfigured()` returns false and:
-
-- no network calls are made,
-- the app uses localStorage exactly as before,
-- nothing throws, and nothing is logged as an error.
-
-This is by design. The migration cannot be the reason your site is down.
-
----
-
-## 16. Costs
-
-Free tier, indefinitely, for this workload. Supabase pauses a free project after
-**7 days with no activity** — one visit un-pauses it. If you are demoing after a
-quiet week, open the app once an hour beforehand.
-
----
-
-## 17. Files this added
-
-```
-supabase/schema.sql          the database: tables, RLS, triggers, realtime
-lib/supabase/env.ts          is it configured?
-lib/supabase/client.ts       the lazily-created client
-lib/supabase/types.ts        row types, mirroring schema.sql
-lib/supabase/mappers.ts      row <-> domain, the only place that converts
-lib/supabase/repo.ts         every read and write, plus realtime
-components/store.tsx         wired to the above; unchanged when not configured
-```
+| Rule | Enforced by |
+|---|---|
+| A role cannot be changed after sign-up | `freeze_profile_role` trigger on `profiles` |
+| Nobody accepts their own price | `guard_offer_update` — compares `auth.uid()` to `last_actor` |
+| Changing a price is a counter-offer, not a silent edit | `guard_offer_update` |
+| A settled offer stays settled | `guard_offer_update` |
+| An offer cannot be moved to a different post or person | `guard_offer_update` |
+| Only the receiver answers a connection request | `guard_connection_update` |
+| You can only write rows that are yours | RLS policies on all four tables |
+| A negotiation is private to its two parties | `offers: readable by the two parties` |
+| A network is private to its owner | `connections: readable by the two parties` |
+| Every new user gets a profile | `on_auth_user_created` trigger on `auth.users` |
+| A price is a positive number under a crore | `offers_price_positive` check constraint |
+| Nobody connects to themselves | `connections_not_self` check constraint |
 
 ---
 
-## 18. Rollback
+## 10. Cost
 
-Three levels, cheapest first.
+The free tier covers this workload indefinitely: 500MB of database, 2GB of
+bandwidth, 200 concurrent realtime connections.
 
-**Level 1 — turn Supabase off (10 seconds).**
-Vercel → Settings → Environment Variables → delete both `NEXT_PUBLIC_SUPABASE_*`
-→ Redeploy. The app returns to localStorage. Nothing else changes. Locally,
-delete `.env.local` and restart.
+Supabase pauses a free project after **seven days with no activity**. One visit
+un-pauses it, but the first request after a pause is slow. If you are demoing
+after a quiet week, open the app once an hour beforehand.
 
-**Level 2 — go back to the pre-Supabase code.**
+---
 
-```powershell
-git checkout v4.2.0-stable
-```
+## 11. Backing out
 
-Or the branch kept for exactly this:
+**Turn Supabase off (ten seconds).** Delete both `NEXT_PUBLIC_SUPABASE_*`
+variables from Vercel and redeploy, or delete `.env.local` locally. The app
+still builds and still loads; it shows a setup notice instead of data.
 
-```powershell
-git checkout backup/pre-supabase-v4.2.0
-```
-
-To publish that state:
-
-```powershell
-git checkout -B main v4.2.0-stable
-git push --force origin main
-```
-
-**Level 3 — the archive.** `lokasetu-ROLLBACK-v4.2.0.zip`, delivered before any
-Supabase work began. Extract it and you are exactly where you were.
-
-**Wipe the Supabase data without touching the app:**
+**Clear the data, keep the schema:**
 
 ```sql
-truncate table sos_events, reviews, messages, bookings, jobs,
-               verification_status, residents, workers cascade;
+truncate table public.offers, public.connections, public.posts restart identity cascade;
+delete from public.profiles;
+-- profiles cascade from auth.users, so to remove the accounts too:
+-- Authentication -> Users -> select -> Delete
 ```
+
+**Start over completely.** Project Settings → General → scroll to the bottom →
+**Delete project**. Then create a new one and come back to step 1.

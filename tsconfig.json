@@ -17,5 +17,5 @@
     "paths": { "@/*": ["./*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "lib/selftest.ts", "scripts", "ssr-check.tsx"]
+  "exclude": ["node_modules", "_legacy", "lib/selftest.ts", "scripts", "ssr-check.tsx"]
 }

@@ -1,30 +1,56 @@
 #!/usr/bin/env node
 /**
- * npm run version:sync
+ * One version number, three places.
  *
- * lib/version.ts is the single source of truth for the build number. This
- * copies it into the two other places that state it — package.json and the
- * README's "Current build" line — because a version written by hand in three
- * files is a version that is wrong in two of them.
+ * `lib/version.ts` is the source of truth. This copies it into package.json
+ * and into the README badge line, and `npm test` fails if they ever disagree —
+ * so what the app prints on screen is always what the README claims.
  *
- * That is not hypothetical: the README said v4.1 while the app said v4.1.3, so
- * the GitHub front page announced a build nobody was running.
- *
- * `npm test` fails if these ever drift again.
+ *   node scripts/version.mjs         check, and fix package.json + README
+ *   node scripts/version.mjs --check exit 1 if they disagree, change nothing
  */
-import { readFileSync, writeFileSync } from 'node:fs';
 
-const version = readFileSync('lib/version.ts', 'utf8').match(/VERSION = '([^']+)'/)?.[1];
-if (!version) {
-  console.error('Could not read VERSION from lib/version.ts');
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const checkOnly = process.argv.includes('--check');
+
+const versionTs = readFileSync(join(root, 'lib/version.ts'), 'utf8');
+const match = versionTs.match(/VERSION\s*=\s*'([^']+)'/);
+if (!match) {
+  console.error('lib/version.ts does not export a VERSION string.');
   process.exit(1);
 }
+const version = match[1];
 
-const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-pkg.version = version;
-writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+let changed = false;
 
-const readme = readFileSync('README.md', 'utf8');
-writeFileSync('README.md', readme.replace(/\*\*Current build: v[\d.]+\*\*/, `**Current build: v${version}**`));
+// package.json
+const pkgPath = join(root, 'package.json');
+const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+if (pkg.version !== version) {
+  if (checkOnly) {
+    console.error(`package.json says ${pkg.version}, lib/version.ts says ${version}`);
+    process.exit(1);
+  }
+  pkg.version = version;
+  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+  changed = true;
+}
 
-console.log(`version ${version} -> package.json, README.md`);
+// README
+const readmePath = join(root, 'README.md');
+const readme = readFileSync(readmePath, 'utf8');
+const updated = readme.replace(/\*\*Current build: v[^*]+\*\*/, `**Current build: v${version}**`);
+if (updated !== readme) {
+  if (checkOnly) {
+    console.error(`README.md does not say v${version}`);
+    process.exit(1);
+  }
+  writeFileSync(readmePath, updated);
+  changed = true;
+}
+
+console.log(changed ? `Synced everything to v${version}` : `Everything already says v${version}`);

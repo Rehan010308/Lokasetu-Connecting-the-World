@@ -1,49 +1,69 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { StoreProvider } from '@/components/store';
-import { ThemeProvider } from '@/components/theme';
+import { Providers } from '@/components/providers';
 
 export const metadata: Metadata = {
-  title: 'LokaSetu — hyperlocal work, in your language',
+  title: {
+    default: 'LokaSetu — connecting the world of work',
+    template: '%s · LokaSetu',
+  },
   description:
-    'LokaSetu connects electricians, plumbers, cooks, house help, barbers, painters, carpenters and scrap collectors with residents in their own neighbourhood — by voice, in six languages.',
+    'A hyperlocal work network for India. Employers and workers agree on a price together, in the open, before the job starts.',
+  applicationName: 'LokaSetu',
+  keywords: ['work', 'hiring', 'India', 'hyperlocal', 'electrician', 'plumber', 'negotiation'],
+  authors: [{ name: 'LokaSetu' }],
+  openGraph: {
+    title: 'LokaSetu — connecting the world of work',
+    description:
+      'Find work. Name your price. A hyperlocal work network where both sides agree on the number before anything starts.',
+    type: 'website',
+  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#F4F7FA' },
-    { media: '(prefers-color-scheme: dark)', color: '#060A11' },
-  ],
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f5f6fb' },
+    { media: '(prefers-color-scheme: dark)', color: '#070a14' },
+  ],
 };
 
-/* Sets the theme before first paint so there is no white flash on a dark phone. */
-const NO_FLASH = `(function(){try{var m=localStorage.getItem('lokasetu:theme')||'system';
-var d=m==='dark'||(m==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
-document.documentElement.setAttribute('data-theme',d?'dark':'light');}catch(e){}})();`;
+/**
+ * Applied before the first paint, so a person who chose dark mode never sees a
+ * white flash on the way in. It is small, synchronous and deliberately
+ * defensive: if storage is unavailable, it falls back to the system setting and
+ * carries on.
+ */
+const NO_FLASH = `
+(function () {
+  try {
+    var stored = localStorage.getItem('lokasetu:theme');
+    var dark = stored ? stored === 'dark'
+                      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    var lang = localStorage.getItem('lokasetu:lang');
+    if (lang) document.documentElement.lang = lang;
+  } catch (e) {}
+})();
+`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="light" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Plus Jakarta Sans for Latin; Noto for the five Indic scripts we ship.
-            Loaded via <link> rather than next/font so a blocked font CDN
-            degrades to the system stack instead of failing the build. */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans+Tamil:wght@400;600;700&family=Noto+Sans+Telugu:wght@400;600;700&family=Noto+Sans+Malayalam:wght@400;600;700&family=Noto+Sans+Kannada:wght@400;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
       </head>
       <body>
-        <ThemeProvider>
-          <StoreProvider>{children}</StoreProvider>
-        </ThemeProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

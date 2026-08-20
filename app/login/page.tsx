@@ -1,124 +1,321 @@
 'use client';
 
-import React from 'react';
-import { useRouter } from 'next/navigation';
-import { LANGUAGES } from '@/lib/i18n';
-import type { Role } from '@/lib/types';
-import { useActions, useT } from '@/components/store';
-import { GlassCard, Reveal, Stagger, StaggerItem } from '@/components/aurora';
-import { HeaderTools, PhoneOtp, Shell, TopBar } from '@/components/kit';
-import { VERSION } from '@/lib/version';
-import { CityPicker } from '@/components/city';
-import { geoOf } from '@/lib/cities';
-import type { Geo } from '@/lib/types';
+import React, { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Brandmark, LanguagePicker, ThemeToggle } from '@/components/shell';
+import { Banner, Button, Card, Field } from '@/components/ui';
+import { SetupNotice } from '@/components/guard';
+import { useAuth, useLang, useToast } from '@/components/providers';
+import { AlertTriangle, ArrowRight, Briefcase, Lock, Mail, User, Wrench } from '@/components/icons';
+import { signIn, signUp } from '@/lib/queries';
+import { DEMO_ACCOUNTS, quickLogin, type DemoAccount } from '@/lib/demo';
+import { isEmail } from '@/lib/format';
+import { CITIES } from '@/lib/catalog';
+import { vars } from '@/lib/style';
+import type { Role } from '@/lib/database.types';
 
-const ROLES = [
-  { role: 'worker'   as Role, icon: '🧰', title: 'a.worker'   as const, desc: 'a.workerD'   as const, demo: 'a.demoWorker'   as const },
-  { role: 'customer' as Role, icon: '🏠', title: 'a.customer' as const, desc: 'a.customerD' as const, demo: 'a.demoCustomer' as const },
-  { role: 'society'  as Role, icon: '🏢', title: 'a.society'  as const, desc: 'a.societyD'  as const, demo: 'a.demoSociety'  as const },
-  { role: 'business' as Role, icon: '🏪', title: 'a.business' as const, desc: 'a.businessD' as const, demo: 'a.demoBusiness' as const },
-];
+type Mode = 'signin' | 'signup';
 
-export default function Login() {
+function LoginScreen() {
   const router = useRouter();
-  const { t, lang } = useT();
-  const { setLang, loginDemo, loginClient } = useActions();
-  const [role, setRole] = React.useState<Role | null>(null);
-  const [geo, setGeo] = React.useState<Geo | null>(geoOf('blr_koramangala') ?? null);
+  const params = useSearchParams();
+  const { t } = useLang();
+  const { status, configured } = useAuth();
+  const toast = useToast();
+
+  const [mode, setMode] = useState<Mode>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [city, setCity] = useState('');
+  const [role, setRole] = useState<Role>('worker');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'form' | string | null>(null);
+
+  // Already signed in? There is nothing to do on this screen.
+  useEffect(() => {
+    if (status === 'signedIn') router.replace('/feed');
+  }, [status, router]);
+
+  const highlightDemo = params?.get('demo') === '1';
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+
+    if (!isEmail(email)) {
+      setError(t('emailLabel'));
+      return;
+    }
+    if (password.length < 6) {
+      setError(t('passwordHint'));
+      return;
+    }
+    if (mode === 'signup' && fullName.trim().length < 2) {
+      setError(t('fullNameLabel'));
+      return;
+    }
+
+    setBusy('form');
+
+    if (mode === 'signin') {
+      const result = await signIn(email, password);
+      setBusy(null);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.replace('/feed');
+      return;
+    }
+
+    const created = await signUp({ email, password, fullName, role, location: city });
+    if (created.error) {
+      setBusy(null);
+      setError(created.error);
+      return;
+    }
+
+    if (created.data.needsConfirmation) {
+      setBusy(null);
+      setNotice(t('checkEmail'));
+      setMode('signin');
+      return;
+    }
+
+    setBusy(null);
+    router.replace('/feed');
+  }
+
+  async function demo(account: DemoAccount) {
+    setError(null);
+    setNotice(null);
+    setBusy(account.email);
+    const failure = await quickLogin(account);
+    setBusy(null);
+    if (failure) {
+      setError(failure);
+      return;
+    }
+    toast(`${account.fullName} · ${account.role === 'worker' ? t('roleWorker') : t('roleEmployer')}`, 'ok');
+    router.replace('/feed');
+  }
 
   return (
-    <Shell>
-      <TopBar title={t('app.name')} subtitle={t('app.tagline')} right={<HeaderTools />} />
-      <main className="page v-6" style={{ paddingTop: 4, paddingBottom: 40 }}>
+    <div className="main">
+      <header className="topbar">
+        <Link href="/" aria-label="LokaSetu">
+          <Brandmark />
+        </Link>
+        <div className="topbar-actions">
+          <LanguagePicker />
+          <ThemeToggle />
+        </div>
+      </header>
 
-        {!role ? (
-          <>
-            <Reveal>
-              <div className="scroll-x">
-                {LANGUAGES.map((l) => (
-                  <button key={l.code} className={`chip${l.code === lang ? ' on' : ''}`} onClick={() => setLang(l.code)}>
-                    {l.native}
-                  </button>
-                ))}
-              </div>
-            </Reveal>
+      <main className="page narrow">
+        <SetupNotice />
 
-            <Reveal delay={0.05}><h2 className="t-h1">{t('a.choose')}</h2></Reveal>
+        <div className="page-head" style={{ textAlign: 'center' }}>
+          <h1>{mode === 'signin' ? t('authSignInTitle') : t('authSignUpTitle')}</h1>
+          <p className="lede">{mode === 'signin' ? t('authSignInSub') : t('authSignUpSub')}</p>
+        </div>
 
-            <Stagger className="v-3" gap={0.06}>
-              {ROLES.map((r) => (
-                <StaggerItem key={r.role}>
-                  <button className="choice" style={{ minHeight: 84 }} onClick={() => setRole(r.role)}>
-                    <span className="lead" aria-hidden style={{ fontSize: 26 }}>{r.icon}</span>
-                    <span>
-                      <span className="ttl">{t(r.title)}</span><br />
-                      <span className="sub">{t(r.desc)}</span>
-                    </span>
-                    <span className="mark" aria-hidden>›</span>
-                  </button>
-                </StaggerItem>
-              ))}
-            </Stagger>
+        {/* ---------------------------------------------- demo accounts -- */}
+        <Card
+          pad="lg"
+          className={highlightDemo ? 'accent' : ''}
+          style={{ marginBottom: 18 }}
+        >
+          <div className="section-title" style={{ marginBottom: 4 }}>
+            {t('demoTitle')}
+          </div>
+          <p className="small muted" style={{ marginBottom: 14 }}>
+            {t('demoSub')}
+          </p>
 
-            {/* One-tap demo accounts, so a judge never has to register. */}
-            <Reveal delay={0.05}>
-              <GlassCard className="pad" glow="gd">
-                <h3 className="t-h3">👀 {t('a.demoTitle')}</h3>
-                <p className="t-sm" style={{ marginTop: 4 }}>{t('a.demoDesc')}</p>
-                <div className="grid-2" style={{ marginTop: 14 }}>
-                  {ROLES.map((r) => (
-                    <button
-                      key={r.role}
-                      className="btn ghost md"
-                      style={{ width: '100%' }}
-                      onClick={() => { loginDemo(r.role); router.push('/'); }}
-                    >
-                      {r.icon} {t(r.demo)}
-                    </button>
-                  ))}
+          <div className="grid-2">
+            {DEMO_ACCOUNTS.map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                className="pick-option"
+                disabled={busy !== null || !configured}
+                onClick={() => demo(account)}
+                style={{ cursor: busy ? 'wait' : 'pointer' }}
+              >
+                <div className="row" style={{ gap: 9, marginBottom: 6 }}>
+                  <span
+                    className="cat-ico"
+                    style={vars({ '--hue': account.role === 'worker' ? 38 : 221 })}
+                  >
+                    {account.role === 'worker' ? <Wrench size={16} /> : <Briefcase size={16} />}
+                  </span>
+                  <span className="pick-title">
+                    {account.role === 'worker' ? t('demoWorker') : t('demoEmployer')}
+                  </span>
                 </div>
-              </GlassCard>
-            </Reveal>
-          </>
-        ) : (
-          <>
-            <button className="btn quiet" style={{ alignSelf: 'flex-start' }} onClick={() => setRole(null)}>
-              ← {t('a.choose')}
-            </button>
+                <div className="pick-body">
+                  {account.fullName}
+                  <br />
+                  <code style={{ fontSize: '0.72rem', opacity: 0.8 }}>{account.email}</code>
+                </div>
+                {busy === account.email ? (
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {t('loading')}…
+                  </div>
+                ) : null}
+              </button>
+            ))}
+          </div>
 
-            {role === 'worker' ? (
-              <GlassCard className="pad v-4">
-                <h2 className="t-h2">🧰 {t('a.worker')}</h2>
-                <p className="t-sm">{t('a.workerD')}</p>
-                <button className="btn" onClick={() => router.push('/worker/onboarding')}>{t('c.continue')} →</button>
-              </GlassCard>
-            ) : (
+          <p className="tiny dim" style={{ marginTop: 12 }}>
+            {DEMO_ACCOUNTS[0].password} — the same password for both. These are public demo
+            credentials, bound by the same security policies as any other account.
+          </p>
+        </Card>
+
+        {/* ------------------------------------------------ email + pass -- */}
+        <Card pad="lg">
+          <form className="stack" onSubmit={submit}>
+            {notice ? (
+              <Banner tone="ok" title={t('saved')}>
+                {notice}
+              </Banner>
+            ) : null}
+
+            {error ? (
+              <Banner tone="bad" icon={<AlertTriangle size={17} />}>
+                {error}
+              </Banner>
+            ) : null}
+
+            {mode === 'signup' ? (
               <>
-                {/* Where you are decides which workers exist for you, so it is
-                    asked before the account is made rather than assumed to be
-                    Bengaluru — which is what the old build did to everyone. */}
-                <GlassCard className="pad v-3">
-                  <h2 className="t-h3">📍 {t('c.pickCity')}</h2>
-                  <CityPicker value={geo} onChange={setGeo} compact />
-                  {geo ? <p className="note em">📍 {geo.areaName}</p> : null}
-                </GlassCard>
+                <Field label={t('chooseRole')} hint={t('roleImmutable')}>
+                  <div className="pick">
+                    <button
+                      type="button"
+                      className="pick-option"
+                      data-on={role === 'worker'}
+                      onClick={() => setRole('worker')}
+                    >
+                      <div className="pick-title">{t('roleWorker')}</div>
+                      <div className="pick-body">{t('roleWorkerHint')}</div>
+                    </button>
+                    <button
+                      type="button"
+                      className="pick-option"
+                      data-on={role === 'employer'}
+                      onClick={() => setRole('employer')}
+                    >
+                      <div className="pick-title">{t('roleEmployer')}</div>
+                      <div className="pick-body">{t('roleEmployerHint')}</div>
+                    </button>
+                  </div>
+                </Field>
 
-                <GlassCard className="pad">
-                  <PhoneOtp
-                    askName
-                    askOrg={role === 'society' || role === 'business'}
-                    onVerified={(phone, name, orgName) => {
-                      loginClient(role as Exclude<Role, 'worker'>, phone, lang, name, orgName, geo ?? undefined);
-                      router.push('/');
-                    }}
+                <Field label={t('fullNameLabel')} htmlFor="name">
+                  <div className="input-group">
+                    <span className="lead">
+                      <User size={16} />
+                    </span>
+                    <input
+                      id="name"
+                      className="input"
+                      autoComplete="name"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                    />
+                  </div>
+                </Field>
+
+                <Field label={t('cityLabel')} optional htmlFor="city">
+                  <input
+                    id="city"
+                    className="input"
+                    list="lokasetu-cities"
+                    autoComplete="address-level2"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
                   />
-                </GlassCard>
+                  <datalist id="lokasetu-cities">
+                    {CITIES.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                </Field>
               </>
-            )}
-          </>
-        )}
-        <p className="t-micro mid" style={{ opacity: .7, marginTop: 8 }}>v{VERSION}</p>
+            ) : null}
+
+            <Field label={t('emailLabel')} htmlFor="email">
+              <div className="input-group">
+                <span className="lead">
+                  <Mail size={16} />
+                </span>
+                <input
+                  id="email"
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </Field>
+
+            <Field label={t('passwordLabel')} hint={t('passwordHint')} htmlFor="password">
+              <div className="input-group">
+                <span className="lead">
+                  <Lock size={16} />
+                </span>
+                <input
+                  id="password"
+                  className="input"
+                  type="password"
+                  autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+            </Field>
+
+            <Button type="submit" variant="primary" size="lg" block loading={busy === 'form'}>
+              {mode === 'signin' ? t('signIn') : t('createAccount')}
+              <ArrowRight size={17} />
+            </Button>
+
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                setMode(mode === 'signin' ? 'signup' : 'signin');
+                setError(null);
+                setNotice(null);
+              }}
+            >
+              {mode === 'signin' ? t('noAccount') : t('haveAccount')}
+            </button>
+          </form>
+        </Card>
       </main>
-    </Shell>
+    </div>
+  );
+}
+
+/**
+ * `useSearchParams` makes a page dynamic; the Suspense boundary is what keeps
+ * the production build from failing with "useSearchParams should be wrapped in
+ * a suspense boundary". It is not optional in the App Router.
+ */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="page narrow" style={{ paddingTop: 80 }} />}>
+      <LoginScreen />
+    </Suspense>
   );
 }

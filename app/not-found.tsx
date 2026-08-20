@@ -1,29 +1,35 @@
 import Link from 'next/link';
 
 /**
- * 404.
+ * A Server Component with no providers, no hooks and no imports beyond Link.
  *
- * A SERVER component on purpose — no hooks, no store, no providers doing work.
- *
- * Without this file Next.js generates its own /_not-found and prerenders it
- * through the root layout, which drags every client provider into the build.
- * That is the route the production build died on: a page nobody asked for,
- * failing on data it never needed. An explicit, dependency-free 404 makes that
- * route trivially prerenderable.
+ * 404 is the one page that has to render when everything else has failed, so
+ * it depends on nothing. This is also the page a Next.js production build
+ * prerenders first, which is why it is deliberately inert.
  */
 export default function NotFound() {
   return (
-    <div className="shell">
-      <main className="page" style={{ paddingTop: 120, textAlign: 'center' }}>
-        <p style={{ fontSize: 54, marginBottom: 8 }} aria-hidden>🧭</p>
-        <h1 className="t-h1">Page not found</h1>
-        <p className="t-sm" style={{ margin: '10px auto 26px', maxWidth: 340 }}>
-          That link does not lead anywhere. The work is back this way.
+    <main
+      style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        textAlign: 'center',
+      }}
+    >
+      <div>
+        <div className="eyebrow" style={{ marginBottom: 10 }}>
+          404
+        </div>
+        <h1 style={{ marginBottom: 8 }}>That page does not exist</h1>
+        <p className="lede" style={{ marginBottom: 22 }}>
+          The link may be old, or the post may have been deleted.
         </p>
-        <Link href="/" className="btn" style={{ maxWidth: 280, margin: '0 auto' }}>
-          Go home
+        <Link href="/feed" className="btn primary">
+          Back to the feed
         </Link>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }

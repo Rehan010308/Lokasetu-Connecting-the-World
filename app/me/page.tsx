@@ -1,275 +1,298 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LANGUAGES, langNative } from '@/lib/i18n';
-import { CITIES, city, geoOf } from '@/lib/cities';
-import { categoryName, serviceName } from '@/lib/i18n-catalog';
-import { servicesOf } from '@/lib/catalog';
-import { telLink } from '@/lib/links';
-import type { Availability } from '@/lib/types';
-import { PAYMENT_METHODS } from '@/lib/payments';
-import { BUILD, VERSION } from '@/lib/version';
-import { useActions, useMe, useStore, useT } from '@/components/store';
-import { Dock, GlassCard, Reveal } from '@/components/aurora';
-import { Empty, HeaderTools, Initials, Shell, Stars, TopBar, VerifiedBadge } from '@/components/kit';
-import { navNormal, navWorker } from '@/components/nav';
-import { ClientPanel, WorkerPanel } from '@/components/panels';
+import { AppShell, LanguagePicker, ThemeToggle } from '@/components/shell';
+import { Guard } from '@/components/guard';
+import { Avatar, Badge, Banner, Button, Card, Chip, Field } from '@/components/ui';
+import { useAuth, useLang, useToast } from '@/components/providers';
+import { AlertTriangle, ArrowUpRight, IndianRupee, Link2, Lock, LogOut, MapPin, ShieldCheck } from '@/components/icons';
+import { updateProfile } from '@/lib/queries';
+import { CATEGORIES, CITIES } from '@/lib/catalog';
+import { categoryKey } from '@/lib/i18n';
+import { normalizeUsername, parseAmount, rupees } from '@/lib/format';
+import { displayName, handleOf } from '@/lib/model';
+import { VERSION } from '@/lib/version';
 
-export default function MePage() {
+function MyProfile() {
+  const { t } = useLang();
+  const { profile, email, refreshProfile, signOut } = useAuth();
+  const toast = useToast();
   const router = useRouter();
-  const { ready, db } = useStore();
-  const me = useMe();
-  const { t, lang } = useT();
-  const { setLang, logout, reset, updateWorker, updateClient } = useActions();
 
-  React.useEffect(() => { if (ready && !me.role) router.replace('/login'); }, [ready, me.role, router]);
-  if (!ready || !me.role) return <Shell><main className="page" style={{ paddingTop: 100 }}><Empty icon="⏳" text={t('c.loading')} /></main></Shell>;
+  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
+  const [bio, setBio] = useState('');
+  const [location, setLocation] = useState('');
+  const [avatar, setAvatar] = useState('');
+  const [rate, setRate] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const w = me.worker;
-  const c = me.client;
-  const isWorker = me.role === 'worker';
+  // Load the form from the profile once it arrives, and again if it changes
+  // underneath (another tab, a realtime update).
+  useEffect(() => {
+    if (!profile) return;
+    setFullName(profile.full_name ?? '');
+    setUsername(profile.username ?? '');
+    setBio(profile.bio ?? '');
+    setLocation(profile.location ?? '');
+    setAvatar(profile.avatar_url ?? '');
+    setRate(profile.hourly_rate ? String(profile.hourly_rate) : '');
+    setSkills(profile.skills);
+  }, [profile]);
+
+  if (!profile) return null;
+
+  const isWorker = profile.role === 'worker';
+
+  function toggleSkill(id: string) {
+    setSkills((current) =>
+      current.includes(id) ? current.filter((s) => s !== id) : [...current, id].slice(0, 6),
+    );
+  }
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+
+    const handle = normalizeUsername(username);
+    if (handle.length < 3) {
+      setError(t('usernameLabel'));
+      return;
+    }
+
+    let hourly: number | null = null;
+    if (isWorker && rate.trim()) {
+      hourly = parseAmount(rate);
+      if (hourly === null) {
+        setError(t('rateLabel'));
+        return;
+      }
+    }
+
+    setBusy(true);
+    const result = await updateProfile(profile.id, {
+      full_name: fullName.trim() || handle,
+      username: handle,
+      bio: bio.trim() || null,
+      location: location.trim() || null,
+      avatar_url: avatar.trim() || null,
+      skills: isWorker ? skills : [],
+      hourly_rate: hourly,
+    });
+    setBusy(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    await refreshProfile();
+    toast(t('saved'), 'ok');
+  }
 
   return (
-    <Shell aside={isWorker && w ? <WorkerPanel worker={w} /> : <ClientPanel />}>
-      <TopBar glassy title={t('n.profile')} right={<HeaderTools />} />
-      <main className="page v-4" style={{ paddingTop: 4 }}>
-
-        <Reveal>
-          <GlassCard className="pad">
-            <div className="h" style={{ gap: 14 }}>
-              <Initials name={me.name} size="l" tone={isWorker ? undefined : 'in'} />
-              <div className="grow" style={{ minWidth: 0 }}>
-                <h1 className="t-h2">{me.name}</h1>
-                <p className="t-xs" style={{ marginTop: 3 }}>
-                  {c?.orgName ? `${c.orgName} · ` : ''}{isWorker && w ? categoryName(w.category, lang) : t(`a.${me.role}` as any)}
-                </p>
-                {isWorker && w?.reviewCount ? <div style={{ marginTop: 6 }}><Stars value={w.rating} count={w.reviewCount} /></div> : null}
-                <div className="h-2 wrap" style={{ gap: 7, marginTop: 10 }}>
-                  {w ? <VerifiedBadge v={w.verification} /> : null}
-                  {me.demo ? <span className="tag gd">DEMO</span> : null}
-                </div>
-              </div>
+    <div className="stack-l">
+      <Card pad="lg">
+        <div className="row" style={{ gap: 14 }}>
+          <Avatar profile={profile} size="lg" />
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="strong truncate" style={{ fontSize: '1.05rem' }}>
+              {displayName(profile)}
             </div>
-            <a className="btn ghost md" style={{ width: '100%', marginTop: 14 }} href={telLink(me.phone)}>
-              📞 +91 {me.phone}
-            </a>
-          </GlassCard>
-        </Reveal>
-
-        {/* -------- worker: verification, services, radius, availability -------- */}
-        {isWorker && w ? (
-          <>
-            {w.verification.status !== 'verified' ? (
-              <Link href="/verify" style={{ display: 'block' }}>
-                <GlassCard interactive className="pad-s" glow="gd">
-                  <div className="between">
-                    <span className="t-sm strong">🪪 {t('v.title')}</span>
-                    <span aria-hidden style={{ color: 'var(--gd-600)' }}>›</span>
-                  </div>
-                </GlassCard>
-              </Link>
-            ) : null}
-
-            <GlassCard className="pad v-4">
-              <div>
-                <p className="label">{t('w.services')}</p>
-                <div className="h-2 wrap" style={{ gap: 8 }}>
-                  {servicesOf(w.category).map((s) => {
-                    const on = w.services.includes(s.id);
-                    return (
-                      <button key={s.id} className={`chip${on ? ' on' : ''}`} style={{ minHeight: 38, fontSize: 13.5 }}
-                        onClick={() => updateWorker(w.id, {
-                          services: on ? w.services.filter((x) => x !== s.id) : [...w.services, s.id],
-                        })}>
-                        {s.icon} {serviceName(s.id, lang)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <p className="label">📍 {t('o.where')}</p>
-                <select className="input" value={w.geo.localityId ?? ''}
-                  onChange={(e) => { const g = geoOf(e.target.value); if (g) updateWorker(w.id, { geo: g }); }}>
-                  {(city(w.geo.cityId ?? 'blr')?.localities ?? []).map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <p className="label">{t('o.radius')}</p>
-                <div className="grid-3">
-                  {[2, 5, 10, 15].map((r) => (
-                    <button key={r} className={`chip${w.radiusKm === r ? ' on' : ''}`}
-                      style={{ minHeight: 50, justifyContent: 'center' }} onClick={() => updateWorker(w.id, { radiusKm: r })}>
-                      {r} {t('c.km')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="label">{t('w.availability')}</p>
-                <div className="v-2">
-                  {(['today', 'weekdays', 'anytime'] as Availability[]).map((v) => (
-                    <button key={v} className={`choice${w.availability === v ? ' on' : ''}`} style={{ minHeight: 54 }}
-                      onClick={() => updateWorker(w.id, { availability: v })}>
-                      <span className="ttl">{t(`av.${v}` as any)}</span>
-                      {w.availability === v ? <span className="mark">✓</span> : null}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Link href={`/worker/${w.id}`} className="btn ghost md" style={{ width: '100%' }}>
-                👁️ {t('w.view')}
-              </Link>
-            </GlassCard>
-          </>
-        ) : null}
-
-        {/* -------- customer, society, business: the account itself --------
-            The spec asked for saved places, payment method, bookings, help and
-            logout to live in one profile rather than being scattered through
-            other screens. */}
-        {!isWorker && c ? (
-          <>
-            <GlassCard className="pad v-4">
-              <h2 className="t-h3">📍 {t('pr.places')}</h2>
-              {(c.savedPlaces ?? []).length === 0 ? (
-                <p className="t-xs">{t('pr.noPlaces')}</p>
-              ) : (
-                <div className="v-2">
-                  {(c.savedPlaces ?? []).map((pl) => (
-                    <div key={pl.id} className="choice" style={{ minHeight: 58 }}>
-                      <span className="lead" aria-hidden>{pl.label === t('pr.home') ? '🏠' : pl.label === t('pr.work') ? '🏢' : '📍'}</span>
-                      <span>
-                        <span className="ttl">{pl.label}</span><br />
-                        <span className="sub">{pl.geo.address ?? pl.geo.areaName}</span>
-                      </span>
-                      <button className="btn quiet" style={{ width: 'auto', marginLeft: 'auto' }}
-                        aria-label={pl.label}
-                        onClick={() => updateClient(c.id, { savedPlaces: (c.savedPlaces ?? []).filter((x) => x.id !== pl.id) })}>
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="h-2 wrap" style={{ gap: 8 }}>
-                {[t('pr.home'), t('pr.work'), t('pr.other')].map((label) => (
-                  <button key={label} className="chip" style={{ minHeight: 42 }}
-                    onClick={() => updateClient(c.id, {
-                      savedPlaces: [
-                        ...(c.savedPlaces ?? []).filter((x) => x.label !== label),
-                        { id: `pl_${label}_${c.id}`, label, geo: c.geo },
-                      ],
-                    })}>
-                    ＋ {label}
-                  </button>
-                ))}
-              </div>
-            </GlassCard>
-
-            <GlassCard className="pad v-3">
-              <h2 className="t-h3">💳 {t('pr.payment')}</h2>
-              <div className="h-2 wrap" style={{ gap: 8 }}>
-                {PAYMENT_METHODS.map((m) => (
-                  <button key={m.id} className={`chip${c.preferredPayment === m.id ? ' on' : ''}`}
-                    style={{ minHeight: 44 }}
-                    onClick={() => updateClient(c.id, { preferredPayment: m.id })}>
-                    {m.icon} {t(m.key as any)}
-                  </button>
-                ))}
-              </div>
-              <p className="t-micro">🔒 {t('y.noteProtected')}</p>
-            </GlassCard>
-
-            <Link href="/jobs" className="choice" style={{ minHeight: 66 }}>
-              <span className="lead" aria-hidden>📋</span>
-              <span><span className="ttl">{t('pr.myBookings')}</span></span>
-              <span className="mark" aria-hidden>›</span>
+            <div className="small dim truncate">
+              {handleOf(profile)} {email ? `· ${email}` : ''}
+            </div>
+          </div>
+          {profile.username ? (
+            <Link href={`/profile/${profile.username}`}>
+              <Button size="sm" variant="ghost">
+                <ArrowUpRight size={15} />
+              </Button>
             </Link>
-          </>
-        ) : null}
+          ) : null}
+        </div>
 
-        {/* -------- everyone: language + emergency contact -------- */}
-        <GlassCard className="pad v-4">
-          <div>
-            <p className="label">🏙️ {t('c.city')}</p>
-            <select
-              className="input"
-              value={me.geo.cityId ?? 'blr'}
-              onChange={(e) => {
-                const target = city(e.target.value);
-                if (!target) return;
-                const g = geoOf(target.localities[0].id)!;
-                if (isWorker && w) updateWorker(w.id, { geo: g });
-                else if (c) updateClient(c.id, { geo: g });
-              }}
-            >
-              {CITIES.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
-            </select>
-            <p className="t-micro" style={{ marginTop: 6 }}>📍 {me.geo.areaName}</p>
-          </div>
-
-          <div>
-            <p className="label">🌐 {t('o.lang')}</p>
-            <div className="h-2 wrap" style={{ gap: 8 }}>
-              {LANGUAGES.map((l) => (
-                <button key={l.code} className={`chip${l.code === lang ? ' on' : ''}`} onClick={() => setLang(l.code)}>
-                  {l.native}
-                </button>
-              ))}
+        <div className="panel" style={{ marginTop: 16 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <Lock size={15} style={{ color: 'var(--ink-3)' }} />
+            <div className="grow">
+              <div className="small strong">
+                {t('accountRole')}:{' '}
+                <Badge tone={isWorker ? 'brand' : 'info'}>
+                  {isWorker ? t('filterWorkers') : t('filterEmployers')}
+                </Badge>
+              </div>
+              <div className="tiny dim" style={{ marginTop: 3 }}>
+                {t('roleImmutable')}
+              </div>
             </div>
           </div>
+        </div>
+      </Card>
 
-          <div>
-            <p className="label">🆘 {t('x.contact')}</p>
+      <Card pad="lg">
+        <form className="stack" onSubmit={save}>
+          <div className="section-title">{t('editProfile')}</div>
+
+          {error ? (
+            <Banner tone="bad" icon={<AlertTriangle size={17} />}>
+              {error}
+            </Banner>
+          ) : null}
+
+          <Field label={t('fullNameLabel')} htmlFor="me-name">
             <input
-              className="input" inputMode="numeric" maxLength={10}
-              placeholder={t('a.phonePh')}
-              value={(isWorker ? w?.emergencyContact : c?.emergencyContact) ?? ''}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, '');
-                if (isWorker && w) updateWorker(w.id, { emergencyContact: v });
-                else if (c) updateClient(c.id, { emergencyContact: v });
-              }}
+              id="me-name"
+              className="input"
+              value={fullName}
+              maxLength={80}
+              onChange={(e) => setFullName(e.target.value)}
             />
-            <p className="t-xs" style={{ marginTop: 6 }}>{t('x.contactSet')}</p>
+          </Field>
+
+          <Field label={t('usernameLabel')} htmlFor="me-username" hint="a-z, 0-9, _">
+            <input
+              id="me-username"
+              className="input"
+              value={username}
+              maxLength={24}
+              onChange={(e) => setUsername(normalizeUsername(e.target.value))}
+            />
+          </Field>
+
+          <Field label={t('bioLabel')} optional htmlFor="me-bio">
+            <textarea
+              id="me-bio"
+              className="textarea"
+              maxLength={600}
+              placeholder={t('bioPlaceholder')}
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+            />
+          </Field>
+
+          <div className="grid-2">
+            <Field label={t('cityLabel')} optional htmlFor="me-location">
+              <div className="input-group">
+                <span className="lead">
+                  <MapPin size={16} />
+                </span>
+                <input
+                  id="me-location"
+                  className="input"
+                  list="me-cities"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+                <datalist id="me-cities">
+                  {CITIES.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </div>
+            </Field>
+
+            {isWorker ? (
+              <Field label={t('rateLabel')} optional htmlFor="me-rate" hint={t('perHour')}>
+                <div className="input-group">
+                  <span className="lead">
+                    <IndianRupee size={16} />
+                  </span>
+                  <input
+                    id="me-rate"
+                    className="input"
+                    inputMode="decimal"
+                    value={rate}
+                    onChange={(e) => setRate(e.target.value)}
+                  />
+                </div>
+              </Field>
+            ) : null}
           </div>
-        </GlassCard>
 
-        <a href="https://wa.me/919000000000?text=LokaSetu%20help" target="_blank" rel="noopener noreferrer"
-           className="choice" style={{ minHeight: 66 }}>
-          <span className="lead" aria-hidden>🛟</span>
-          <span><span className="ttl">{t('pr.help')}</span><br /><span className="sub">{t('ts.support')}</span></span>
-          <span className="mark" aria-hidden>›</span>
-        </a>
+          <Field label={t('mediaLabel')} optional htmlFor="me-avatar" hint="https://…">
+            <div className="input-group">
+              <span className="lead">
+                <Link2 size={16} />
+              </span>
+              <input
+                id="me-avatar"
+                className="input"
+                type="url"
+                value={avatar}
+                onChange={(e) => setAvatar(e.target.value)}
+              />
+            </div>
+          </Field>
 
-        <Link href="/trust" className="choice" style={{ minHeight: 66 }}>
-          <span className="lead" aria-hidden>🛡️</span>
-          <span>
-            <span className="ttl">{t('ts.title')}</span><br />
-            <span className="sub">{t('ts.sub')}</span>
+          {isWorker ? (
+            <Field label={t('skillsLabel')} hint={`${skills.length}/6`}>
+              <div className="row-wrap">
+                {CATEGORIES.map((entry) => (
+                  <Chip
+                    key={entry.id}
+                    on={skills.includes(entry.id)}
+                    onClick={() => toggleSkill(entry.id)}
+                    type="button"
+                  >
+                    {t(categoryKey(entry.id))}
+                  </Chip>
+                ))}
+              </div>
+            </Field>
+          ) : null}
+
+          <Button type="submit" variant="primary" size="lg" block loading={busy}>
+            {t('save')}
+          </Button>
+        </form>
+      </Card>
+
+      <Card pad="lg">
+        <div className="section-title">{t('appearance')}</div>
+        <div className="row" style={{ gap: 8 }}>
+          <LanguagePicker />
+          <ThemeToggle />
+          <span className="small muted">
+            {t('language')} · {t('appearance')}
           </span>
-          <span className="mark" aria-hidden>›</span>
-        </Link>
+        </div>
 
-        <button className="btn ghost" onClick={() => { logout(); router.push('/login'); }}>{t('c.logout')}</button>
-        <button className="btn quiet" onClick={() => { reset(); router.push('/login'); }}>♻️ Reset demo data</button>
+        <hr style={{ margin: '16px 0' }} />
 
-        {/* Build stamp. Small, but it ends the "which version is this?"
-            question that cost an afternoon. */}
-        <p className="t-micro mid" style={{ opacity: .75 }}>
-          LokaSetu v{VERSION} · {BUILD}
-        </p>
-      </main>
-      <Dock items={isWorker ? navWorker(t) : navNormal(t)} />
-    </Shell>
+        <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+          <ShieldCheck size={16} style={{ color: 'var(--ok)' }} />
+          <span className="small muted">
+            {isWorker && profile.hourly_rate ? `${rupees(profile.hourly_rate)} ${t('perHour')} · ` : ''}
+            LokaSetu v{VERSION}
+          </span>
+        </div>
+
+        <Button
+          variant="danger"
+          block
+          onClick={async () => {
+            await signOut();
+            router.push('/');
+          }}
+        >
+          <LogOut size={16} />
+          {t('signOut')}
+        </Button>
+      </Card>
+    </div>
+  );
+}
+
+export default function MePage() {
+  return (
+    <AppShell>
+      <Guard>
+        <MyProfile />
+      </Guard>
+    </AppShell>
   );
 }
