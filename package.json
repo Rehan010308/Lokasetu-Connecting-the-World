@@ -1,6 +1,6 @@
 {
   "name": "lokasetu",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "private": true,
   "description": "LokaSetu — a hyperlocal work network for India: profiles, community posts, connections and Rapido-style price negotiation, on Supabase.",
   "scripts": {

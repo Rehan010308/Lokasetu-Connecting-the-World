@@ -4,7 +4,7 @@ A hyperlocal work network for India. Employers post work, workers post what they
 are available for, the two sides connect — and then they **agree on a price
 together, in the open, before anything starts**.
 
-**Current build: v5.1.0**
+**Current build: v5.1.1**
 
 Built on Next.js 15 (App Router), React 19 and Supabase. Ten languages. No
 utility CSS framework — the design system is one hand-written stylesheet.
