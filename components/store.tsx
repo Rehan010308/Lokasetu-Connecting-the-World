@@ -64,11 +64,26 @@ const EMPTY_DB: DB = {
   session: { role: null, id: null, lang: 'en' },
 };
 
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [db, setDb] = useState<DB>(EMPTY_DB);
-  const [ready, setReady] = useState(false);
+export function StoreProvider({
+  children, initialDb,
+}: {
+  children: React.ReactNode;
+  /**
+   * TEST SEAM. Production never passes this — the browser seeds in the effect
+   * below and the server renders empty.
+   *
+   * It exists because the server-render check could only ever exercise the
+   * EMPTY store: effects do not run during renderToStaticMarkup, so seeded
+   * data never reached a single component and a crash that needs real data
+   * sailed through every check. This lets the harness render both states.
+   */
+  initialDb?: DB;
+}) {
+  const [db, setDb] = useState<DB>(initialDb ?? EMPTY_DB);
+  const [ready, setReady] = useState(Boolean(initialDb));
 
   useEffect(() => {
+    if (initialDb) return;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       const stored = raw ? (JSON.parse(raw) as Stored) : null;

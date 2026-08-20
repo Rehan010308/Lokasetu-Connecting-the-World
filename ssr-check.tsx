@@ -22,6 +22,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StoreProvider } from '@/components/store';
 import { ThemeProvider } from '@/components/theme';
+import { seedDB } from '@/lib/seed';
 
 const ROUTES: [string, () => Promise<any>][] = [
   ['/',                  () => import('@/app/page')],
@@ -44,22 +45,39 @@ const ROUTES: [string, () => Promise<any>][] = [
 
 async function main() {
 let failed = 0;
+
+/* Two passes. EMPTY is what the server prerenders. SEEDED is what the browser
+   shows a quarter-second later, once the effect has loaded real data — the
+   state where nearly every real crash lives, and the one the first version of
+   this harness never rendered. */
+const SESSIONS: [string, any][] = [
+  ['empty',    undefined],
+  ['customer', { ...seedDB(), session: { role: 'customer', id: 'c_demo', lang: 'en' } }],
+  ['worker',   { ...seedDB(), session: { role: 'worker',   id: 'w_demo', lang: 'en' } }],
+  ['society',  { ...seedDB(), session: { role: 'society',  id: 's_demo', lang: 'en' } }],
+];
+
 for (const [name, load] of ROUTES) {
-  try {
-    const mod = await load();
-    const Page = mod.default;
-    const html = renderToStaticMarkup(
-      React.createElement(ThemeProvider, null,
-        React.createElement(StoreProvider, null,
-          React.createElement(Page)))
-    );
-    if (!html || html.length < 20) throw new Error(`rendered only ${html.length} chars`);
-    console.log(`  ✅ ${name.padEnd(20)} ${String(html.length).padStart(6)} chars`);
-  } catch (e: any) {
-    failed++;
-    console.log(`  ❌ ${name.padEnd(20)} ${e?.message?.split('\n')[0]}`);
-    if (process.env.TRACE) console.log(e.stack?.split('\n').slice(0, 6).join('\n'));
+  const marks: string[] = [];
+  for (const [label, initialDb] of SESSIONS) {
+    try {
+      const mod = await load();
+      const Page = mod.default;
+      const html = renderToStaticMarkup(
+        React.createElement(ThemeProvider, null,
+          React.createElement(StoreProvider, { initialDb } as any,
+            React.createElement(Page)))
+      );
+      if (!html || html.length < 20) throw new Error(`rendered only ${html.length} chars`);
+      marks.push(`${label} ok`);
+    } catch (e: any) {
+      failed++;
+      marks.push(`${label} FAILED`);
+      console.log(`  ❌ ${name.padEnd(20)} [${label}] ${e?.message?.split('\n')[0]}`);
+      if (process.env.TRACE) console.log(e.stack?.split('\n').slice(1, 7).join('\n'));
+    }
   }
+  if (!marks.some((m) => m.includes('FAILED'))) console.log(`  ✅ ${name.padEnd(20)} ${marks.join(' · ')}`);
 }
 console.log(failed ? `\n${failed} route(s) fail to prerender` : '\n✅ every route prerenders on the server without throwing');
 process.exit(failed ? 1 : 0);

@@ -5,7 +5,7 @@
 > raddiwalas, shop assistants) with the people who need them in the same
 > neighbourhood — **by voice**, in **ten languages**, with **no forms to fill**.
 
-**Current build: v4.1.5**
+**Current build: v4.1.6**
 
 The same number prints on the login screen and at the foot of the Profile tab,
 so what you are running is always checkable against what this file claims.

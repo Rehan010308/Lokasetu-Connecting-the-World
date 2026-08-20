@@ -532,7 +532,13 @@ const en = (k: any) => t('en', k);
        that path fails the production build instead of one screen. */
     const store = readFileSync(new URL('../components/store.tsx', import.meta.url), 'utf8');
     ok('the store does not seed during render', !store.includes('useState<DB>(() => seedDB())'));
-    ok('the server renders an empty database', store.includes('useState<DB>(EMPTY_DB)'));
+    /* Matching intent, not an exact expression — this pinned the literal
+       `useState<DB>(EMPTY_DB)` and broke the moment a test seam was added
+       around it, which is a test failing on refactoring rather than on a bug. */
+    ok('the server renders an empty database',
+       /useState<DB>\((initialDb \?\? )?EMPTY_DB\)/.test(store));
+    ok('the test seam is inert in production',
+       store.includes('initialDb?: DB') && store.includes('if (initialDb) return;'));
     /* Every call to seedDB must sit after the first useEffect — i.e. inside
        one. Checking position rather than an exact call shape, because the
        exact shape changed once and quietly broke this assertion. */
@@ -585,6 +591,28 @@ const en = (k: any) => t('en', k);
     const jobPage = readFileSync(new URL('../app/job/[id]/page.tsx', import.meta.url), 'utf8');
     ok('the job page reads no clock while rendering',
        !jobPage.includes('nextOccurrence(job.shift!, Date.now())'));
+
+    /* The root layout needs its own boundary. app/error.tsx sits INSIDE the
+       route tree and cannot catch a provider that throws — Next falls back to
+       "Application error: a client-side exception has occurred", which hides
+       the message behind a console and leaves the debugger nothing. */
+    let hasGlobalError = true;
+    try { readFileSync(new URL('../app/global-error.tsx', import.meta.url)); } catch { hasGlobalError = false; }
+    ok('the root layout has an error boundary', hasGlobalError);
+    if (hasGlobalError) {
+      const ge = readFileSync(new URL('../app/global-error.tsx', import.meta.url), 'utf8');
+      ok('the global boundary renders its own html and body', ge.includes('<html') && ge.includes('<body'));
+      ok('the global boundary shows the actual message, not just a shrug',
+         ge.includes('error?.message'));
+      ok('the global boundary uses no provider it cannot rely on',
+         !ge.includes('useT()') && !ge.includes('useStore()'));
+    }
+
+    /* Seeding runs in a browser on every first visit. It must stay small
+       enough for localStorage, which is ~5MB and throws when exceeded. */
+    const seeded = JSON.stringify({ version: '0', db: seedDB() });
+    ok('the seeded database fits in localStorage',
+       seeded.length < 4 * 1024 * 1024, `${(seeded.length / 1024).toFixed(0)} KB`);
 
     /* The type gate must stay on. It was disabled once, to unblock a deploy,
        and the error it was hiding turned out to be real. */
