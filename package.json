@@ -1,6 +1,6 @@
 {
   "name": "lokasetu",
-  "version": "4.1.7",
+  "version": "4.1.8",
   "private": true,
   "description": "LokaSetu - AI-powered hyperlocal employment platform for India's informal workforce",
   "scripts": {

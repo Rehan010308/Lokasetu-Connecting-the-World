@@ -27,6 +27,31 @@ const nextConfig = {
   transpilePackages: ['motion'],
 
   /**
+   * DIAGNOSTIC SWITCH — set UNMINIFIED=1 to build without minifying the client.
+   *
+   *     $env:UNMINIFIED=1; npm run build; npm start     (PowerShell)
+   *     UNMINIFIED=1 npm run build && npm start          (bash)
+   *
+   * A crash that happens in `npm run build` but never in `npm run dev` is
+   * almost always the minifier removing something it wrongly judged dead. This
+   * makes that a five-minute experiment instead of a guess:
+   *
+   *   - app works unminified  → the minifier is the cause, and the readable
+   *     stack will name the real module instead of a one-letter function
+   *   - app still crashes     → the minifier is innocent and the bug is real
+   *     code, so stop looking at bundling entirely
+   *
+   * The bundle is larger and slower this way. It is a diagnostic, and it is
+   * also a usable stopgap if a deadline lands before the root cause does.
+   */
+  webpack(config, { dev, isServer }) {
+    if (!dev && !isServer && process.env.UNMINIFIED === '1') {
+      config.optimization.minimize = false;
+    }
+    return config;
+  },
+
+  /**
    * TypeScript errors DO stop the deploy, deliberately.
    *
    * This was briefly disabled to unblock a build failing at "Checking validity
