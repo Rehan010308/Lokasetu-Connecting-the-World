@@ -14,7 +14,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 /* ------------------------------------------------------------ motion tokens */
 
@@ -97,30 +97,69 @@ export function Magnetic({
   children, strength = 0.22, className,
 }: { children: React.ReactNode; strength?: number; className?: string }) {
   const reduce = useReducedMotion();
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const sx = useSpring(x, { stiffness: 260, damping: 18, mass: 0.5 });
-  const sy = useSpring(y, { stiffness: 260, damping: 18, mass: 0.5 });
   const ref = React.useRef<HTMLDivElement>(null);
+  const raf = React.useRef(0);
+  const target = React.useRef({ x: 0, y: 0 });
+  const at = React.useRef({ x: 0, y: 0 });
+
+  /**
+   * WHY THIS IS PLAIN rAF AND NOT useSpring
+   *
+   * This used useMotionValue + useSpring. Both subscribe to the animation
+   * library's frame clock DURING RENDER, and that clock is a module-scoped
+   * `let now = 0` that is only ever read inside closures — exactly the shape an
+   * aggressive minifier will decide is unused and drop. The result in a
+   * production build, and only in a production build, was:
+   *
+   *     ReferenceError: now is not defined
+   *         at renderWithHooks
+   *
+   * Invisible in `npm run dev` (unminified), invisible to TypeScript (the
+   * identifier is inside a dependency), and invisible to a server render.
+   *
+   * A 6px hover nudge does not need a spring physics engine. This is the same
+   * approach Counter below already takes, for the same stated reason: no
+   * dependency in the render path means no dependency to break in it.
+   */
+  const tick = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* critically damped easing — visually a spring, arithmetically a lerp */
+    at.current.x += (target.current.x - at.current.x) * 0.18;
+    at.current.y += (target.current.y - at.current.y) * 0.18;
+    el.style.transform = `translate3d(${at.current.x.toFixed(2)}px, ${at.current.y.toFixed(2)}px, 0)`;
+
+    const settled =
+      Math.abs(target.current.x - at.current.x) < 0.05 &&
+      Math.abs(target.current.y - at.current.y) < 0.05;
+    raf.current = settled ? 0 : requestAnimationFrame(tick);
+  }, []);
+
+  const start = React.useCallback(() => {
+    if (!raf.current) raf.current = requestAnimationFrame(tick);
+  }, [tick]);
+
+  React.useEffect(() => () => { if (raf.current) cancelAnimationFrame(raf.current); }, []);
 
   function onMove(e: React.PointerEvent) {
     if (reduce || e.pointerType !== 'mouse' || !ref.current) return;
     const r = ref.current.getBoundingClientRect();
-    x.set(Math.max(-8, Math.min(8, (e.clientX - (r.left + r.width / 2)) * strength)));
-    y.set(Math.max(-8, Math.min(8, (e.clientY - (r.top + r.height / 2)) * strength)));
+    target.current = {
+      x: Math.max(-8, Math.min(8, (e.clientX - (r.left + r.width / 2)) * strength)),
+      y: Math.max(-8, Math.min(8, (e.clientY - (r.top + r.height / 2)) * strength)),
+    };
+    start();
   }
-  function reset() { x.set(0); y.set(0); }
+
+  function reset() {
+    target.current = { x: 0, y: 0 };
+    start();
+  }
 
   return (
-    <motion.div
-      ref={ref}
-      className={className}
-      style={{ x: sx, y: sy }}
-      onPointerMove={onMove}
-      onPointerLeave={reset}
-    >
+    <div ref={ref} className={className} onPointerMove={onMove} onPointerLeave={reset}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 

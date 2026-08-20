@@ -614,6 +614,20 @@ const en = (k: any) => t('en', k);
     ok('the seeded database fits in localStorage',
        seeded.length < 4 * 1024 * 1024, `${(seeded.length / 1024).toFixed(0)} KB`);
 
+    /* No component may touch the animation library's frame clock during
+       render. useMotionValue/useSpring subscribe to a module-scoped `let now`
+       that a production minifier removed, giving "ReferenceError: now is not
+       defined" from inside the vendor chunk — in the production build only. */
+    for (const f of ['../components/aurora.tsx', '../components/map.tsx', '../components/chart.tsx']) {
+      const src = readFileSync(new URL(f, import.meta.url), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      ok(`${f.split('/').pop()} uses no frame-clock API`,
+         !src.includes('useSpring(') && !src.includes('useMotionValue('));
+    }
+    ok('the animation library is pinned, not a floating range',
+       !JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+         .dependencies.motion.startsWith('^'));
+
     /* The type gate must stay on. It was disabled once, to unblock a deploy,
        and the error it was hiding turned out to be real. */
     const cfg = readFileSync(new URL('../next.config.mjs', import.meta.url), 'utf8')
