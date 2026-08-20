@@ -41,6 +41,9 @@ export default function JobPage() {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [payBusy, setPayBusy] = React.useState(false);
   const [chatOpen, setChatOpen] = React.useState(false);
+  /* Read the clock once, after mount. Zero on the server. */
+  const [now, setNow] = React.useState(0);
+  React.useEffect(() => { setNow(Date.now()); }, []);
 
   if (!ready) return <Shell><div className="page" style={{ paddingTop: 90 }}><CardSkeleton /></div></Shell>;
   if (!job) return <Shell><TopBar back title="—" /><main className="page"><p className="t-body">{t('e.generic')}</p></main></Shell>;
@@ -142,7 +145,11 @@ export default function JobPage() {
                 <div className="kv"><span className="k">{t('g.staffCount')}</span><span className="v t-num">{job.staffCount}</span></div>
               ) : null}
               {(() => {
-                const next = nextOccurrence(job.shift!, Date.now());
+                /* `now` is state set on mount, never Date.now() read during
+                   render — a clock read while rendering gives the server one
+                   answer and the browser another, which is a hydration
+                   mismatch by construction. */
+                const next = now ? nextOccurrence(job.shift!, now) : null;
                 return next ? (
                   <div className="kv">
                     <span className="k">{t('sh.next')}</span>

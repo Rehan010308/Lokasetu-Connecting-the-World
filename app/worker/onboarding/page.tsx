@@ -11,7 +11,7 @@ import { extractWorkerProfile, type ExtractedProfile } from '@/lib/ai/profile';
 import { UNVERIFIED } from '@/lib/verify';
 import type { Availability, CategoryId, Geo, LangCode } from '@/lib/types';
 import { useActions, useStore, useT } from '@/components/store';
-import { GlassCard, Reveal, Ring, SPRING, Stagger, StaggerItem } from '@/components/aurora';
+import { CardSkeleton, GlassCard, Reveal, Ring, SPRING, Stagger, StaggerItem } from '@/components/aurora';
 import { HeaderTools, PhoneOtp, Shell, TopBar, VoiceField } from '@/components/kit';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
@@ -107,7 +107,7 @@ interface Turn { who: 'ai' | 'me'; text: string }
 export default function Onboarding() {
   const router = useRouter();
   const { t, lang } = useT();
-  const { db } = useStore();
+  const { db, ready } = useStore();
   const { setLang, registerWorker, loginWorker } = useActions();
   const reduce = useReducedMotion();
 
@@ -162,6 +162,10 @@ export default function Onboarding() {
     });
     setStep('done');
     say('ai', ask('done'));
+  }
+
+  if (!ready) {
+    return <Shell><main className="page" style={{ paddingTop: 100 }}><CardSkeleton /></main></Shell>;
   }
 
   return (

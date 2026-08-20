@@ -523,6 +523,61 @@ const en = (k: any) => t('en', k);
        LANGUAGES.every((l) => RANGES.every((r) => !!t(l.code, r.key as any))));
   }
 
+  /* ========================= 10h. SERVER RENDER / VERCEL BUILD SAFETY */
+  section('Server render safety');
+  {
+    /* THE BUILD FAILURE: the provider seeded inside a useState initialiser, so
+       Next.js built the whole demo database during prerender — on the server,
+       for every static route including /_not-found. Anything that throws in
+       that path fails the production build instead of one screen. */
+    const store = readFileSync(new URL('../components/store.tsx', import.meta.url), 'utf8');
+    ok('the store does not seed during render', !store.includes('useState<DB>(() => seedDB())'));
+    ok('the server renders an empty database', store.includes('useState<DB>(EMPTY_DB)'));
+    ok('seeding happens in an effect, which never runs on the server',
+       /useEffect\([\s\S]{0,400}setDb\(seedDB\(\)\)/.test(store));
+
+    /* The crash that an empty database used to cause. Comments are stripped
+       first: the fix is DESCRIBED in a comment right next to the code, and a
+       naive substring check matched the prose and reported a false failure. */
+    const storeCode = store.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    ok('no unguarded index into an empty workers array',
+       !storeCode.includes('db.workers[0].geo'));
+    ok('the location fallback chain is fully optional',
+       storeCode.includes('db.workers[0]?.geo'));
+    ok('a location is always resolvable', (() => {
+      const empty = { workers: [], clients: [] } as any;
+      const geo = empty.clients[0]?.geo ?? empty.workers[0]?.geo ?? geoOf('blr_koramangala');
+      return !!geo && typeof geo.lat === 'number';
+    })());
+
+    /* /_not-found is the route the build died on. */
+    let has404 = true;
+    try { readFileSync(new URL('../app/not-found.tsx', import.meta.url)); } catch { has404 = false; }
+    ok('an explicit 404 page exists', has404);
+    if (has404) {
+      const nf = readFileSync(new URL('../app/not-found.tsx', import.meta.url), 'utf8');
+      ok('the 404 page is a server component with no hooks',
+         !nf.includes("'use client'") && !/\buse[A-Z]/.test(nf));
+    }
+
+    /* Browser-only globals must never be touched while rendering. */
+    for (const f of ['../components/store.tsx', '../components/theme.tsx', '../components/aurora.tsx']) {
+      const src = readFileSync(new URL(f, import.meta.url), 'utf8');
+      const render = src.split('useEffect').shift() ?? '';
+      ok(`${f.split('/').pop()} touches no browser global during render`,
+         !/\bwindow\.|\bdocument\.|localStorage\./.test(render.replace(/\/\*[\s\S]*?\*\//g, '')));
+    }
+
+    /* Clock reads during render are hydration mismatches by construction. */
+    const jobPage = readFileSync(new URL('../app/job/[id]/page.tsx', import.meta.url), 'utf8');
+    ok('the job page reads no clock while rendering',
+       !jobPage.includes('nextOccurrence(job.shift!, Date.now())'));
+
+    /* The test harness must stay out of the app's build graph. */
+    const tsconfig = readFileSync(new URL('../tsconfig.json', import.meta.url), 'utf8');
+    ok('the test harness is excluded from the Next build', tsconfig.includes('lib/selftest.ts'));
+  }
+
   /* ==================================================== 11. PAYMENTS */
   section('Payments');
   ok('7 payment methods offered', PAYMENT_METHODS.length === 7, PAYMENT_METHODS.map(m => m.id).join(','));

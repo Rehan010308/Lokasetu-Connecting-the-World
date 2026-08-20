@@ -10,7 +10,9 @@
     "test": "tsx lib/selftest.ts",
     "typecheck": "tsc --noEmit",
     "doctor": "node scripts/doctor.mjs",
-    "doctor:fix": "node scripts/doctor.mjs --fix"
+    "doctor:fix": "node scripts/doctor.mjs --fix",
+    "ssr": "tsx --tsconfig tsconfig.ssr.json ssr-check.tsx",
+    "verify": "npm run typecheck && npm test"
   },
   "dependencies": {
     "next": "15.1.9",
@@ -24,5 +26,8 @@
     "@types/react-dom": "19.0.3",
     "typescript": "5.7.3",
     "tsx": "4.19.2"
+  },
+  "engines": {
+    "node": ">=18.18.0"
   }
 }

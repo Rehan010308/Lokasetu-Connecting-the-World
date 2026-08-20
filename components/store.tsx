@@ -29,18 +29,43 @@ interface StoreValue {
 
 const Ctx = createContext<StoreValue | null>(null);
 
+/**
+ * An empty database, used for exactly one render: the server's.
+ *
+ * WHY THIS EXISTS. The provider used to seed inside the useState initialiser —
+ * `useState(() => seedDB())` — which meant Next.js built the entire demo
+ * database (113 workers, 400+ jobs) during PRERENDER, on the server, for every
+ * static route including /_not-found. Anything that throws inside seedDB then
+ * fails the production build rather than one screen at runtime, which is how a
+ * data-layer slip turns into "Export encountered an error on /_not-found".
+ *
+ * Seeding is browser work: it reads localStorage and stamps timestamps against
+ * the visitor's clock. So the server renders an empty store and every screen
+ * shows its loading state, and the real data arrives in the mount effect. The
+ * server now does no work that can fail.
+ */
+const EMPTY_DB: DB = {
+  workers: [], clients: [], jobs: [], quotes: [], messages: [], reviews: [], sos: [],
+  session: { role: null, id: null, lang: 'en' },
+};
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [db, setDb] = useState<DB>(() => seedDB());
+  const [db, setDb] = useState<DB>(EMPTY_DB);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as DB;
-        if (parsed && Array.isArray(parsed.workers) && Array.isArray(parsed.clients)) setDb(parsed);
+      const parsed = raw ? (JSON.parse(raw) as DB) : null;
+      if (parsed && Array.isArray(parsed.workers) && Array.isArray(parsed.clients) && parsed.workers.length) {
+        setDb(parsed);
+      } else {
+        setDb(seedDB());
       }
-    } catch { /* corrupt storage — fall back to seed */ }
+    } catch {
+      /* corrupt storage — a fresh seed is always better than a broken app */
+      setDb(seedDB());
+    }
     setReady(true);
   }, []);
 
@@ -329,7 +354,12 @@ export function useMe() {
   const { db } = useStore();
   const worker = useCurrentWorker();
   const client = useCurrentClient();
-  const geo = worker?.geo ?? client?.geo ?? db.clients[0]?.geo ?? db.workers[0].geo;
+  /* `db.workers[0].geo` threw a TypeError the moment the database was empty —
+     which it now is on the server, and also is for a corrupt-storage recovery.
+     Every link in this chain is optional, and the last resort is a real place
+     rather than a crash. */
+  const geo: Geo =
+    worker?.geo ?? client?.geo ?? db.clients[0]?.geo ?? db.workers[0]?.geo ?? geoOf('blr_koramangala')!;
   return {
     role: db.session.role,
     id: db.session.id,

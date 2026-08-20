@@ -211,15 +211,28 @@ function ClientHome({ q, setQ, speech }: { q: string; setQ: (v: string) => void;
  * than type. Voice assists; it no longer occupies the fold.
  */
 function WorkerHome() {
+  const router = useRouter();
   const { db, refresh } = useStore();
   const me = useMe();
   const { t, lang } = useT();
   const { updateWorker } = useActions();
-  const w = me.worker!;
+  const w = me.worker;
+
+  /* The session can name a worker who is no longer in the database — a stored
+     session that outlived a reseed, for instance. `me.worker!` asserted that
+     away and then threw a white screen on `w.verification`. Send them to sign
+     in again instead. */
+  React.useEffect(() => {
+    if (!w) router.replace('/login');
+  }, [w, router]);
 
   const [q, setQ] = React.useState('');
   const [sort, setSort] = React.useState<'all' | 'closest' | 'urgent' | 'paid'>('all');
   const speech = useSpeech(lang, setQ);
+
+  if (!w) {
+    return <Shell><main className="page" style={{ paddingTop: 100 }}><Empty icon="⏳" text={t('c.loading')} /></main></Shell>;
+  }
 
   /* Only this worker's trade, only inside the radius they chose. The filter
      lives in rankWorkers so there is exactly one rule, tested in selftest. */

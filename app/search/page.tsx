@@ -26,7 +26,7 @@ export default function SearchPage() {
 
 function SearchInner() {
   const params = useSearchParams();
-  const { db } = useStore();
+  const { db, ready } = useStore();
   const me = useMe();
   const { t, lang } = useT();
 
@@ -44,6 +44,12 @@ function SearchInner() {
     })();
     return () => { dead = true; };
   }, [svc]);
+
+  /* The store is empty until the browser has seeded it, so a server render —
+     and the first client render — must not draw an empty marketplace. */
+  if (!ready) {
+    return <Shell><div className="page v-3" style={{ paddingTop: 90 }}><CardSkeleton /><CardSkeleton /></div></Shell>;
+  }
 
   /* ------------------------------ level 1: categories ------------------------------ */
   if (!cat) {
